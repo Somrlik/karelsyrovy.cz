@@ -1,0 +1,17 @@
+---
+import Layout from "../layouts/BlogPost.astro";
+import { REPOSITORY_GITHUB_URL } from "../consts.ts";
+---
+
+<Layout
+    title="500 💀"
+    description="The server dead"
+    isError={true}
+    pubDate={new Date("2000-01-01")}
+>
+    <p>The server died when processing this page.</p>
+    <p>
+        If the issue persists, please raise an issue at the
+        <a href={REPOSITORY_GITHUB_URL} target="_blank">GitHub repo</a>.
+    </p>
+</Layout>

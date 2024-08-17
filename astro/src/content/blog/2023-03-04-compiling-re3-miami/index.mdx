@@ -1,0 +1,510 @@
+---
+title: 'Compiling re3/miami on linux'
+description: Wanted to play Vice City again and maybe try to mod it later. re3 is an OSS reimplementation, let's run it
+pubDate: 2023-05-05
+heroImage: './hero.png'
+---
+
+import {Image} from 'astro:assets';
+import FilenameForCodeblock from '../../../components/FilenameForCodeblock.astro';
+import vcDebug from './vc-debug.png';
+
+tl;dr
+-----
+
+need
+- Steam install of OG Vice City (or patched retail, just the copy paths on the end change)
+- `cmake`
+
+```
+# get repo
+wget -q https://archive.org/download/github.com-GTAmodding-re3_-_2021-09-06_14-11-00/GTAmodding-re3_-_2021-09-06_14-11-00.bundle
+git clone GTAmodding-re3_-_2021-09-06_14-11-00.bundle re3
+cd re3
+git fetch -u ../GTAmodding-re3_-_2021-09-06_14-11-00.bundle 'refs/*:refs/*'
+git checkout miami
+
+# get vendor libs
+git submodule update --init --recursive
+
+# get system libs (might need more, see cmake output)
+sudo apt-get install libopenal-dev libglfw3-dev libmpg132-dev libopengl-dev
+
+# build
+take build
+cmake -DLIBRW_PLATFORM=GL3 ..
+make -j$(nproc)
+
+# copy files
+cp ./src/reVC ~/.steam/steam/steamapps/common/Grand\ Theft\ Auto\ Vice\ City/reVC
+cp -R ../gamefiles/* ~/.steam/steam/steamapps/common/Grand\ Theft\ Auto\ Vice\ City
+
+# run
+cd ~/.steam/steam/steamapps/common/Grand\ Theft\ Auto\ Vice\ City
+./reVC
+```
+
+---
+
+
+I've recently got an urge to play GTA:Vice City again. Maybe to just cruise along
+and rock out to the best soundtrack ever or to try some speedrun strats.
+
+I've heard of the reimplementation of Vice City by the GTA Modding community and
+was impressed by their efforts to bring such an old game on any device.
+
+Sadly, Take Two issued a [DMCA complaint](https://github.com/github/dmca/blob/master/2021/02/2021-02-19-take-two.md)
+against their public codebase. No matter,
+I had my own clone of the repo and plenty of people were still hosting their
+"presumably illegal" clones.
+
+The main repository is still under [DMCA takedown](https://github.com/GTAmodding/re3),
+but since when you post something on the internet it's there forever,
+the Internet Archive snagged a copy just before takedown and it's available at
+[The Internet Archive](https://archive.org/details/github.com-GTAmodding-re3_-_2021-09-06_14-11-00);
+
+Since taking on T2 lawyers would be a lengthy, costly (and probably stupid TBH) undertaking I undestand
+that contesting this takedown is outside of the possibilites of the people that worked hard on such
+a monumental task.
+
+I firmly stand behind the idea that reverse engineering is a right and as long as you don't profit as
+a competitior against the original authors, you hsould be allowed to go anything you please
+with the software or devices you paid for.
+
+The law is pretty sketchy around these parts, so I would recommend you to read
+- [EFF (Electronic Frontier Foundation) FAQ about reversing](https://www.eff.org/issues/coders/reverse-engineering-faq)
+- [vidstromlabs summary about reversing in the EU](https://www.vidstromlabs.com/blog/the-legal-boundaries-of-reverse-engineering-in-the-eu/)
+
+Since I've cracked a few pieces of software myself I know that reversing is an art and
+should be respected, not prosecuted.
+
+
+The Definitive Edition
+----------------------
+
+Not long after, T2 announced the [Trilofy Definitive Edition](https://www.rockstargames.com/GTATrilogy). Plenty of people were
+understandably excited. Not me, really, because I knew they would include some bullshit DRM that won't work without ring 0 access
+on windows.
+
+But oh boy, noone was ready for the shit they would put out.
+
+Grove Street Games, clearly understaffed, overworked and feature-crept
+were forced to put out a clearly mangled version. Some (not all) issues are beatufily and clearly
+demonstrated in a 2-parter by Vadim M narrated by BadgerGoodger.
+
+- [Part 1 (31 minutes)](https://www.youtube.com/watch?v=ZSvoC6lZl5s&ab_channel=VadimM)
+- [Part 2 (42 minutes)](https://www.youtube.com/watch?v=TTxY_S0XD8E&ab_channel=VadimM)
+
+R* [apologised](https://www.rockstargames.com/newswire/article/393o373751k48k/a-note-from-the-rockstar-games-team-re-grand-theft-auto-the-trilogy-th)
+and promised to fix the most glaring issues. To be fair, some were fixed, but pushing 4 patches in nearly 2 years and never fixing
+keybinding issues is a clear sign of... ignorance? Incompetence? Carelessness?
+
+The technical aspect of the remasters is interesting and clearly a product of poeple that care and have plenty of know
+how and balls to run two game engines in parallel and use AI for texture upscaling
+[(source, couldn't find the original)](https://libertycity.net/gta-the-trilogy/news/5168-gta-the-trilogy-combines-unreal-engine.html).
+
+Thus, IMHO, the blame in on T2 for pushing out unfinished software, not on Grove Street Games for trying
+to implement three huge games at once. But since it looks like that T2 and R* aren't spending any of
+the gambling GTA 5 online money on continued development of Definitive Edition, it seems that we won't get another
+No Man's Sky story.
+
+
+Skip the Story, Let's Compile
+-----------------------------
+
+OK, let's get the archive.
+
+```
+$ take re3-miami
+$ wget https://archive.org/download/github.com-GTAmodding-re3_-_2021-09-06_14-11-00/GTAmodding-re3_-_2021-09-06_14-11-00.bundle
+$ file GTAmodding-re3_-_2021-09-06_14-11-00.bundle
+GTAmodding-re3_-_2021-09-06_14-11-00.bundle: Git bundle
+```
+
+It's a git bundle, so let's clone it into our own repo.
+
+```
+$ git clone GTAmodding-re3_-_2021-09-06_14-11-00.bundle re3
+$ cd re3
+$ git log --oneline | head -5
+3233ffe1 Merge pull request #1233 from madebr/cmake-fixes
+3569b7ed Fix ped comments on oal
+a15d5589 Fix reflection counter
+d23c045d Audio: small refactoring
+3bc6aa85 Audio: a bit more PS2 changes
+```
+
+Comparing to other mirrors, the merge of PR#1233 is indeed the last commit.
+
+Next, let's checkout the `miami` branch. This will require for us to pull refs from remote/bundle.
+
+```
+$ git checkout miami
+error: pathspec 'miami' did not match any file(s) known to git
+$ git fetch -u ../GTAmodding-re3_-_2021-09-06_14-11-00.bundle 'refs/*:refs/*'
+From ../GTAmodding-re3_-_2021-09-06_14-11-00.bundle
+ * [new ref]           origin/miami -> origin/miami
+ * [new ref]           origin/lcs   -> origin/lcs
+$ git checkout miami
+Branch 'miami' set up to track remote branch 'miami' from 'origin'.
+Switched to a new branch 'miami'
+```
+
+We could also checkout `origin/miami` but doesn't really matter.
+
+We got `CMakeLists.txt` and `premake`, I'm used to `cmake` and I already have it installed.
+
+```
+$ cmake ..
+-- Building reVC GIT SHA1: a16fcd8d6a79e433c1c6e73d540f1bbe27e14164
+-- REVC_AUDIO = OAL (choices=OAL)
+-- LIBRW_PLATFORM = NULL (choices=NULL;GL3)
+CMake Error at /somrlik/Apps/cmake-3.25.1-linux-x86_64/share/cmake-3.25/Modules/FindOpenAL.cmake:116 (set_target_properties):
+  IMPORTED_LIBNAME property value
+
+    /usr/lib/x86_64-linux-gnu/libopenal.so
+
+  may not contain '/'.
+Call Stack (most recent call first):
+  src/CMakeLists.txt:56 (find_package)
+
+
+-- Checking for one of the modules 'mpg123'
+-- Configuring incomplete, errors occurred!
+```
+
+Oh, so we will need to get some headers and libs on our system. We could of course download and install them separately,
+but since I'm lazy and Ubuntu provides a lot of packages, I will install the prerequisites using `apt`.
+
+You can get the prerequisites from sources, compile, link and provide headers for cmake yourselves.
+
+Ubuntu development packages are usually in the format of `lib[NAME]-dev`. After installing one, I try to run
+`cmake` again and again until all libraries are available.
+
+For me the missing libraries were `openal`, `glfw3` and `mpg132`, you might need more.
+Probably `opengl` I would hazard a guess.
+
+```
+$ sudo apt-get install libopenal-dev libglfw3-dev libmpg132-dev
+[ --- normal apt-get output, nothing interesting --- ]
+```
+
+After running `cmake` again:
+
+```
+$ take build
+$ cmake ..
+-- The C compiler identification is GNU 9.4.0
+[ --- lines ommited ---]
+CMake Error at CMakeLists.txt:45 (add_subdirectory):
+  The source directory
+
+    /somrlik/projects/re3-miami/re3/vendor/librw
+
+  does not contain a CMakeLists.txt file.
+[ --- lines ommited ---]
+-- Configuring incomplete, errors occurred!
+```
+
+We will need to get `librw` which is a OSS reimplementation of the RenderWare engine.
+Fortunately the source is added as a git module, so we just need to fetch the modules.
+
+```
+$ git submodule update --init --recursive
+Submodule 'vendor/librw' (https://github.com/aap/librw.git) registered for path 'vendor/librw'
+Submodule 'vendor/ogg' (https://github.com/xiph/ogg.git) registered for path 'vendor/ogg'
+Submodule 'vendor/opus' (https://github.com/xiph/opus.git) registered for path 'vendor/opus'
+Submodule 'vendor/opusfile' (https://github.com/xiph/opusfile.git) registered for path 'vendor/opusfile'
+Cloning into '/somrlik/projects/re3-miami/re3/vendor/librw'...
+Cloning into '/somrlik/projects/re3-miami/re3/vendor/ogg'...
+Cloning into '/somrlik/projects/re3-miami/re3/vendor/opus'...
+Cloning into '/somrlik/projects/re3-miami/re3/vendor/opusfile'...
+Submodule path 'vendor/librw': checked out '5501c4fdc7425ff926be59369a13593bb6c81b54'
+Submodule path 'vendor/ogg': checked out '684c73773e7e2683245ffd6aa75f04115b51123a'
+Submodule path 'vendor/opus': checked out '6bae366f9fef25191fc812c430e8abd40a13a233'
+Submodule path 'vendor/opusfile': checked out '6452e838e68e8f4fc0b3599523c760ac6276ce89'
+```
+
+Let's try `cmake` again.
+
+```
+$ cmake ..
+-- Building reVC GIT SHA1: a16fcd8d6a79e433c1c6e73d540f1bbe27e14164
+-- REVC_AUDIO = OAL (choices=OAL)
+-- LIBRW_PLATFORM = NULL (choices=NULL;GL3)
+-- Checking for one of the modules 'mpg123'
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /somrlik/projects/re3-miami/re3/build
+```
+
+Nice, let's `make`!
+
+```
+$ make
+[ --- a lot of warnings --- ]
+In file included from /somrlik/projects/re3-miami/re3/src/core/common.h:58,
+                 from /somrlik/projects/re3-miami/re3/src/animation/AnimBlendAssocGroup.cpp:1:
+/somrlik/projects/re3-miami/re3/src/fakerw/rwcore.h: At global scope:
+/somrlik/projects/re3-miami/re3/src/fakerw/rwcore.h:17:13: error: ‘RWDEVICE’ in namespace ‘rw’ does not name a type
+   17 | typedef rw::RWDEVICE::Im2DVertex RwIm2DVertex;
+      |             ^~~~~~~~
+[ --- a lot more errors and warnings ---]
+make[2]: *** [src/CMakeFiles/reVC.dir/build.make:76: src/CMakeFiles/reVC.dir/animation/AnimBlendAssocGroup.cpp.o] Error 1
+make[1]: *** [CMakeFiles/Makefile2:175: src/CMakeFiles/reVC.dir/all] Error 2
+make: *** [Makefile:91: all] Error 2
+```
+
+This is a bit harder to debug, so I will spare you the process.
+
+When `librw` is compiled with `LIBRW_PLATFORM = NULL`, `RWDEVICE` is not defined, since there is
+no rendering device. From `cmake` output, we can see that the possible values are `NULL,GL3`
+
+```
+-- LIBRW_PLATFORM = NULL (choices=NULL;GL3)
+```
+
+presuming `GL3` stands for `OpenGL 3` we can regenerate makefiles by passing the option to `cmake`
+
+```
+$ cmake -DLIBRW_PLATFORM=GL3 ..
+-- Building reVC GIT SHA1: a16fcd8d6a79e433c1c6e73d540f1bbe27e14164
+-- REVC_AUDIO = OAL (choices=OAL)
+-- LIBRW_PLATFORM = GL3 (choices=NULL;GL3)
+-- LIBRW_GL3_GFXLIB = GLFW (choices=GLFW;SDL2)
+-- Found OpenGL: /usr/lib/x86_64-linux-gnu/libOpenGL.so
+-- Checking for one of the modules 'mpg123'
+-- Configuring done
+-- Generating done
+-- Build files have been written to: /somrlik/projects/re3-miami/re3/build
+```
+
+Okay, let's `make`!
+
+```
+$ time make -j$(nproc)
+[ --- compiler output omitted ---]
+[ 66%] Linking CXX executable reVC
+[100%] Built target reVC
+make -j$(nproc)  48,99s user 5,19s system 966% cpu 5,606 total
+```
+
+Our executable is `src/reVC`.
+
+```
+$ cd src
+$ ./reVC
+cdvd_stream: can't get filesystem info
+
+REVC ASSERT FAILED
+	File: /somrlik/projects/re3-miami/re3/src/core/CdStreamPosix.cpp
+	Line: 206
+	Function: CdStreamInit
+	Expression: 0
+[DBG]: size of matrix 80
+[DBG]: size of placeable 80
+[DBG]: size of entity 120
+[DBG]: size of building 120
+[DBG]: size of dummy 128
+casepath couldn't find dir/file "neo", full path was neo/neo.txd
+casepath couldn't find dir/file "text", full path was text/russian.gxt
+casepath couldn't find dir/file "TEXT", full path was /somrlik/projects/re3-miami/re3/build/src\TEXT\
+casepath couldn't find dir/file "AMERICAN.GXT", full path was AMERICAN.GXT
+[1]    1103042 segmentation fault (core dumped)  ./reVC
+```
+
+Well, the executable runs, but segfaults. Seems we're missing the original files, so let's just copy
+the executable in the root of our original Vice City install. I'm using the Steam release.
+
+> There is no `install` target in the generated Makefile (in fact, there is just one target)
+> so I will be copying everything by hand.
+
+```
+$ cp ./reVC ~/.steam/steam/steamapps/common/Grand\ Theft\ Auto\ Vice\ City/reVC
+$ ~/.steam/steam/steamapps/common/Grand\ Theft\ Auto\ Vice\ City/reVC
+[ --- the same as above --- ]
+[1]    1103206 segmentation fault (core dumped)  ~/.steam/steam/steamapps/common/Grand\ Theft\ Auto\ Vice\ City/reVC
+```
+
+After some digging around in the repo, I found the missing files in `gamefiles` directory in root of repo,
+so I just copied them.
+
+```
+$ cp -R ../../gamefiles/* ~/.steam/steam/steamapps/common/Grand\ Theft\ Auto\ Vice\ City
+$ ~/.steam/steam/steamapps/common/Grand\ Theft\ Auto\ Vice\ City/reVC
+[ --- the same as above --- ]
+[1]    1103206 segmentation fault (core dumped)  ~/.steam/steam/steamapps/common/Grand\ Theft\ Auto\ Vice\ City/reVC
+```
+
+After some more digging, I found out that CWD matters for `reVC`. Writing a patch for this probably wouldn't be hard.
+But sure, let's run it "properly".
+
+```
+$ cd ~/.steam/steam/steamapps/common/Grand\ Theft\ Auto\ Vice\ City
+$ ./reVC
+```
+
+Violá.
+
+
+Maybe We Are Done
+-----------------
+
+> Skip this part if `reVC` runs fine now. The following issues are probably related just to me.
+
+If you were greeted with
+
+```
+[DBG]: cdvd_stream: read info 0x55b8e7836dd0
+[DBG]: Using one streaming thread for all channels
+[DBG]: size of matrix 80
+[DBG]: size of placeable 80
+[DBG]: size of entity 120
+[DBG]: size of building 120
+[DBG]: size of dummy 128
+[DBG]: Created cdstream thread
+[DBG-2]: [/somrlik/projects/re3-miami/re3/src/skel/glfw/glfw.cpp.psInitialize:484]: gGameState = GS_START_UP
+casepath couldn't find dir/file "gta_vc.set", full path was gta_vc.set
+[DBG-2]: Default skin set as no other skins are available OR saved skin not found!
+[DBG]: Physical memory size 3675533312
+[DBG]: Available physical memory 1456480256
+OpenGL version: 4.6 (Core Profile) Mesa 21.2.6
+casepath couldn't find dir/file "gta_vc.set", full path was gta_vc.set
+X Error of failed request:  BadWindow (invalid Window parameter)
+  Major opcode of failed request:  40 (X_TranslateCoords)
+  Resource id in failed request:  0xb01d0d
+  Serial number of failed request:  197
+  Current serial number in output stream:  197
+```
+
+you are as stumped as I was.
+
+After some debugging, I found [this glfw commit](https://github.com/glfw/glfw/commit/9372ba95faabd1bb45280d201d6ccdae77bf872e) that
+presumably fixes this issue. Okay, the version supplied by canonical probably predates this commit and updating GLFW
+in my system to another version and potentionally breaking other packages is not something I want to do.
+
+TBH, I don't know if it is just me, but I've always had issues when using GLFW. But I've had success using SDL!
+
+Luckily, `librw` allows you to choose the frontend (backend?) for the OpenGL rendering and the choices are GLFW and SDL2!
+
+So, let's get SDL2
+
+```
+$ sudo apt-get install libsdl2-dev
+$ cmake -DLIBRW_PLATFORM=GL3 -DLIBRW_GL3_GFXLIB=SDL2 ..
+$ make -j12
+[ --- compiler output --- ]
+/somrlik/projects/re3-miami/re3/src/skel/crossplatform.h:66:5: error: ‘GLFWwindow’ does not name a type
+   66 |     GLFWwindow* window;
+[ --- compiler output --- ]
+make: *** [Makefile:91: all] Error 2
+```
+
+Oh, so `librw` can use SDL2 but `re3` requires GLFW.
+
+So, GLFW it is then.
+
+Like I said, I won't be updating the system-wide GLFW, so I chose to build the newest release of GLFW3 from source.
+
+> For those interested, the [issue](https://github.com/glfw/glfw/issues/1633) might be related to running a tiling window manager
+> with no window decorations, but I tested both with and without window decorations and in my case
+> compiling with or without commit `fe57e3c` doesn't make a difference.
+
+So let's visit [releases]() and see that the latest version is `3.3.8`. My system has `3.3.2` installed, which I found out by
+adding
+
+```
+printf("GLFW version: %s\n", glfwGetVersionString());
+```
+
+to `/vendor/librw/src/gl/gl3device.cpp` and recompiling.
+This seemed like the simplest way, since I already had everything open.
+
+Since it's a vendor lib, let's add it to `vendor`:
+
+> I could have also added it as another git module, but dealing with git modules is IMO a bit of a hassle.
+
+```
+$ TEMPFILE=$(mktemp)
+$ wget -qO "${TEMPFILE}" https://github.com/glfw/glfw/releases/download/3.3.8/glfw-3.3.8.zip
+$ unzip -u -d ./vendor/ "${TEMPFILE}"
+$ rm "${TEMPFILE}"
+```
+
+Since I won't be installing GLFW system wide, I chose a different install prefix, `./pfx` for simplicity,
+
+```
+$ cd ./vendor/glfw-3.3.8
+$ take build
+$ cmake -DCMAKE_INSTALL_PREFIX=./pfx ..
+$ make
+$ make install
+```
+
+Oh, GLFW compiles some tests to the `tests` folder by default. Let's try them!
+
+```
+$ ./tests/glfwinfo
+GLFW header version: 3.3.8
+GLFW library version: 3.3.8
+GLFW library version string: "3.3.8 X11 GLX EGL OSMesa clock_gettime evdev"
+[--- more info about OpenGL and Vulkan ---]
+$ ./tests/windows
+```
+
+The last one even opens a window! And it works!
+
+> Compiling 3.3.2 and trying to run `./tests/windows` works but `./tests/inputlag` fails
+> with the same error as above. No clue what is really happening.
+
+Let's `make install` and see what is included in out installation.
+
+```
+$ make install
+$ tree pfx
+pfx
+├── include
+│   └── GLFW
+│       ├── glfw3.h
+│       └── glfw3native.h
+└── lib
+    ├── cmake
+    │   └── glfw3
+    │       ├── glfw3Config.cmake
+    │       ├── glfw3ConfigVersion.cmake
+    │       ├── glfw3Targets.cmake
+    │       └── glfw3Targets-noconfig.cmake
+    ├── libglfw3.a
+    └── pkgconfig
+        └── glfw3.pc
+
+6 directories, 8 files
+```
+
+We have the `lib/pkgconfig/glfw3.pc` that will tell `cmake` where to find our version of GLFW,
+so we're golden.
+
+Let's just point `cmake` to our GLFW installation and compile `re3` again.
+
+```
+$ cd ../../../build
+$ cmake -DCMAKE_PREFIX_PATH=../vendor/glfw-3.3.8/build/pfx -DLIBRW_PLATFORM=GL3 -DLIBRW_GL3_GFXLIB=GLFW ..
+$ time make -j$(nproc)
+[ --- at lot of compiler ouput --- ]
+[100%] Built target reVC
+make -j$(nproc)  91,80s user 10,10s system 991% cpu 10,272 total
+```
+
+Copying the files over and running `./reVC` the screen blinks and
+
+Done
+----
+
+<Image alt="Screenshot of Vice City with debugging info from re3" src={vcDebug} />
+
+And we're done. I hope you didn't encounter my issues with GLFW and you have a copy of `reVC`
+running on your machine.
+
+Be sure to thank everyone who contributed to the original code.
+
+Have fun hacking around the code and maybe I will try to write some mods myself too.

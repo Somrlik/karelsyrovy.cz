@@ -1,0 +1,31 @@
+---
+import { REPOSITORY_GITHUB_URL } from "../consts.ts";
+import path from "node:path";
+
+const REPO_EDIT_BRANCH = "master";
+const ASTRO_RELATIVE_ROOT = "/astro/src/content/blog";
+
+interface Props {
+    localFilePath?: string;
+}
+
+const { localFilePath } = Astro.props;
+
+function findRepoURLFromLocalFilePath(localFilePath: string) {
+    return path.join(
+        REPOSITORY_GITHUB_URL,
+        "tree",
+        REPO_EDIT_BRANCH,
+        ASTRO_RELATIVE_ROOT,
+        localFilePath,
+    );
+}
+---
+
+{
+    localFilePath && (
+        <a target="_blank" href={findRepoURLFromLocalFilePath(localFilePath)}>
+            Edit this page on Github.com
+        </a>
+    )
+}

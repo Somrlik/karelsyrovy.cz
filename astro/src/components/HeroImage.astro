@@ -1,0 +1,34 @@
+---
+import { Image } from "astro:assets";
+import path from "node:path";
+import { hashString } from "../hash-string.ts";
+
+const heroImages = import.meta.glob<{ default: ImageMetadata }>([
+    "/src/content/blog/**/hero.{jpeg,jpg,png,gif}",
+    "/src/blog-placeholder-heros/*.{jpeg,jpg,png,gif}",
+]);
+
+interface Props {
+    file?: string;
+    heroImage?: string;
+
+    alt: string;
+    width?: number;
+    height?: number;
+}
+
+const { file, heroImage, alt, width, height } = Astro.props;
+
+let imagePath = path.join(
+    "/src/content/blog/",
+    path.dirname(file ?? ""),
+    heroImage ?? "",
+);
+
+if (!heroImages[imagePath]) {
+    const hash = hashString(file);
+    imagePath = path.join("/src/blog-placeholder-heros/", `${hash % 4}.jpg`);
+}
+---
+
+<Image src={heroImages[imagePath]()} alt={alt} width={width} height={height} />

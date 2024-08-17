@@ -1,0 +1,565 @@
+---
+title: 'American Fugitive and the mystery of c05c'
+description: 'Exploring American Fugitive save files and GSON'
+pubDate: '2022-10-20'
+heroImage: './hero.png'
+---
+
+import {Image} from 'astro:assets';
+import FilenameForCodeblock from '../../../components/FilenameForCodeblock.astro';
+import imgStatsBeginning from './stats-beginning.png';
+import imgAchievementsUnlocked from './achievements-unlocked.png';
+import editor_png from './editor.png';
+
+
+I've been recently playing [American Fugitive](https://store.steampowered.com/app/934780/American_Fugitive/)
+and I've enjoyed it quite a bit. A nice callback to old GTAs with a serviceable story, fun mechanics
+but IMO lacking a bit in the combat system. Overall recommended.
+
+So that's my review. Trying to get the most out of the game was fun, so naturally as a completionist
+I wanted to explore what it takes to 100% the game.
+
+Let's look at the [Steam achievements](https://steamcommunity.com/stats/934780/achievements).
+There are of course a couple of them you will complete with the story, a nice metric for the developers of
+how many players were engaged by the game and the story to complete it.
+
+But let's skip dwelling on the fact that 77.2% of owners completed the first mission and only 8.1%
+completed the story. I wanna get **all** the achievements, so let's look at the most diffcult ones.
+
+## Challenges and time trials
+
+> Complete all challenges and time trials with golden medals.
+
+Honestly easy. Upon failing the first time trial horribly I began to feel scared, but the rest of them
+was easy to challenging, only like two of them were hard.
+
+But I am about to lose my mind.
+
+
+## No Stone Left Unturned
+
+> Find every hidden stash.
+
+The game contains 100 hidden stashes (maybe a callback to some collectibles in 3D GTAs?).
+Finding them all can be a terrible timesink. After completing the story, I found around 60
+of them, not yet knowing if I wanted to find them all. Some of them are locked behind
+coded safes for which the code can be found out by reading hints scattered around the map.
+
+The coded safes were fun, since the hints often contain a small puzzle. For example, one
+combination is "the year our grandmother died", for which you will need to find out
+the name of the family and finally go to the graveyard to read her headstone.
+
+The ones without hints... well... they sucked. A floating package in GTA Vice City,
+a floating horseshoe in GTA:SA or a bright note in Banjo Kazooie is easy to spot.
+Cracked wall in Zelda games is a bit more hidden but a piece of uneven ground blending
+into the surrounding soil or pigeons perching on a piece of railing
+(200 of them? Really GTA:IV?) are bullshot.
+
+So hiding a stash behind the trees in a fixed camera perspective is a sure way to
+force players to just reach for an online map that some blessed soul spend days making
+and spend hours having it opened on a second monitor and trying to discern where the heck
+is the stash hidden.
+
+Finding the rest of them took me about an hour and twenty minutes.
+
+
+## Stick Up Artist
+
+> Hold up 50 businesses.
+
+Having looked at the stats screen and seeing that I stuck up only 13 times had me worried.
+But I found a place with three businesses nearby each other. Each stick up took me about
+30 seconds with about 10 seconds of travel time, so on the whole about 30 minutes.
+
+
+## Gone In 60 Seconds
+
+> Steal 200 cars.
+
+After completing pretty much all of the other achievements, the stat "Cars stolen" was at 86.
+After spending 20 minutes at a car rental agency and breaking into every car there,
+having to find more crowbars to use to break into more cars, I gave up at 115.
+
+
+## One Track Mind and Rollin', Rollin', Rollin'
+
+> Destroy 100 Enemy Tanks and Crush 250 Vehicles with a Tank.
+
+These two achievements were going to break me. On a good rampage, I can get around
+1 to 2 tanks per minute (if they decide to spawn - I once went for 5 minutes without a tank!)
+and crush 2 to 3 cars per minute. Using simple math and most optimistic predictions, I get:
+
+> max(50 minutes, 84 minutes) = 84 minutes
+
+84 minutes when the spawns are good, my tank doesn't get stuck on the crushed car (happens a lot BTW).
+
+That's where I decided to cheat.
+
+---
+
+## Strategy of Cheating
+
+When cheating, I basically have two options:
+
+- manipulating the memory of game
+- manipulating the save file
+
+I decided to go with the save file, because I was tired of memory manipulation,
+where one value might be in multiple locations, referencing stale object not yet
+garbage collected or where one value is used for displaying and the other
+is the actual value and then looking for the accessors in ASM and finding the
+pointer references and...
+
+Yeah, save files.
+
+### Find the save file
+
+Since I am running the game through SteamPlay/Proton I will look in the wine prefix.
+
+```cmd
+$ cd ~/.steam/steam/steamapps/compatdata/
+$ ls
+[...a lot of directories with just numbers as names...]
+```
+
+Oh, I need the Steam AppID. It's the number in Steam's url.
+
+```cmd
+$ echo "https://store.steampowered.com/app/934780/American_Fugitive/" | grep -Eo "([0-9]+)"
+934780
+$ cd ~/.steam/steam/steamapps/compatdata/934780/pfx/drive_c/
+$ find -name "*Fugitive*"
+./users/steamuser/Temp/Fallen Tree Games Ltd/American Fugitive
+./users/steamuser/AppData/LocalLow/Fallen Tree Games Ltd/American Fugitive
+```
+
+The `Temp` dir will be temporary files, lets ignore it.
+
+```cmd
+$ cd ./users/steamuser/AppData/LocalLow/Fallen Tree Games Ltd/American Fugitive
+$ tree .
+.
+├── output_log.txt
+├── SaveGame
+│   ├── Profile
+│   │   ├── PlayerProfile.dat.bson
+│   │   └── steam_autocloud.vdf
+│   └── SceneMap_default
+│       ├── AllManagers.dat.bson
+│       └── steam_autocloud.vdf
+└── Unity
+    └── 628b636c-365e-4abf-b60a-31dffd89f81b
+        └── Analytics
+            ├── ArchivedEvents
+            │   ├── 166891479600038.fb4f9fde
+            │   │   ├── c
+            │   │   ├── e
+            │   │   ├── g
+            │   │   ├── p
+            │   │   └── s
+            │   ├── 166891492000039.fb4f9fde
+            │   │   ├── c
+            │   │   ├── e
+            │   │   ├── g
+            │   │   └── s
+            │   └── 166891492300040.fb4f9fde
+            │       ├── c
+            │       ├── e
+            │       ├── g
+            │       └── s
+            ├── config
+            └── values
+
+10 directories, 20 files
+```
+
+Let's ignore the Unity debug and analytics stuff and I'm left with:
+
+```cmd
+SaveGame
+├── Profile
+│   ├── PlayerProfile.dat.bson
+│   └── steam_autocloud.vdf
+└── SceneMap_default
+     ├── AllManagers.dat.bson
+     └── steam_autocloud.vdf
+```
+
+### SaveGame/Profile/PlayerProfile.dat.bson
+
+```cmd
+$ vim SaveGame/Profile/PlayerProfile.dat.bson
+```
+
+reveals I'm probably dealing with a binary format with some some ASCII
+inbetween. Seeing such strings as `KeyboardDefaultRemap` and `LockFPS`,
+I see that these are probably global settings and move on.
+
+### SaveGame/SceneMap_default/AllManagers.dat.bson
+
+```cmd
+$ vim SaveGame/SceneMap_default/AllManagers.dat.bson
+```
+
+Bingo. Inbetween binary junk I see
+
+- `MGR_PLAYERPERSISTANTDATA.Cash`
+- `MGR_TIME_OF_DAY.totalGameTimeInMinutes`
+
+Lets open the file in something more suited for viewing binary.
+
+```cmd
+$ xxd SaveGame/SceneMap_default/AllManagers.dat.bson
+[...bunch of hex...]
+```
+
+Okay, thats a lot. First of all, I search for "[C|c]ars"
+
+```cmd
+$ xxd SaveGame/SceneMap_default/AllManagers.dat.bson | grep -i cars
+00007240: 7200 0000 0000 00c0 6540 0143 6172 7353  r.......e@.CarsS
+```
+
+`CarsS` what? Lets see more output:
+
+```cmd
+$ xxd SaveGame/SceneMap_default/AllManagers.dat.bson | grep -A2 -i cars
+00007240: 7200 0000 0000 00c0 6540 0143 6172 7353  r.......e@.CarsS
+00007250: 746f 6c65 6e00 0000 0000 00c0 5c40 0148  tolen.......\@.H
+00007260: 6967 6865 7374 5261 6d70 6167 6500 0000  ighestRampage...
+```
+
+`CarsStolen`, nice. Since I will be looking at the dump a lot, lets see
+some surrounding lines:
+
+```cmd
+$ xxd SaveGame/SceneMap_default/AllManagers.dat.bson | grep -B3 -A3 -i cars
+00007210: 4f63 6375 7069 6564 5665 6869 636c 6573  OccupiedVehicles
+00007220: 546f 7765 6400 0000 0000 0000 0040 0154  Towed........@.T
+00007230: 6f70 5370 6565 6446 6c61 6d69 6e67 4361  opSpeedFlamingCa
+00007240: 7200 0000 0000 00c0 6540 0143 6172 7353  r.......e@.CarsS
+00007250: 746f 6c65 6e00 0000 0000 00c0 5c40 0148  tolen.......\@.H
+00007260: 6967 6865 7374 5261 6d70 6167 6500 0000  ighestRampage...
+00007270: 0000 0000 3240 0143 6976 696c 6961 6e4b  ....2@.CivilianK
+```
+
+I am starting to see a pattern! Let's rearrange the hexdump a bit:
+
+```
+OccupiedVehiclesTowed     00 0000 0000 0000 0040 01
+TopSpeedFlamingCar        00 0000 0000 00c0 6540 01
+CarsStolen                00 0000 0000 00c0 5c40 01
+HighestRampage            00 0000 0000 0000 3240 01
+```
+
+`40 01` repeats, so I _assume_ (we might touch on that later) that
+it probably is just a separator. Aligning the hexdump, I get:
+
+```
+OccupiedVehiclesTowed     00 00 00 00 00 00 00 00
+TopSpeedFlamingCar        00 00 00 00 00 00 c0 65
+CarsStolen                00 00 00 00 00 00 c0 5c
+HighestRampage            00 00 00 00 00 00 00 32
+```
+
+These values probably correspond to the ingame stats, seen here:
+
+<Image alt="Stats screen" src={imgStatsBeginning} />
+
+Assume:
+
+- `OccupiedVehiclesTowed` = "Occupied Vehicles Towed"     = 2
+- `TopSpeedFlamingCar`    = _not present in stats screen_
+- `CarsStolen`            = "Cars stolen"                 = 115
+- `HighestRampage`        = _not present in stats screen_
+
+Next, converting the binary to human readable data.
+
+The binary value is 8 bytes long, this leaves us with a couple of options
+of its data type (assuming all of them have the same data type)
+
+LE (little endian)
+- 1x 8 bytes `double`
+- 1x 8 bytes `int64` or `long`
+- 2x 4 bytes `float`
+- 2x 4 bytes `int`
+- ... couple of others, like 8x 1 byte char, but those are unlikely
+
+BE (big endian)
+- 1x 8 bytes `double`
+- 1x 8 bytes `int64` or `long`
+- 2x 4 bytes `float`
+- 2x 4 bytes `int`
+- ... couple of others, like 8x 1 byte char, but those are unlikely
+
+**Drumroll please...**
+
+```
+                  Exp |   dblLE |   dblBE |               i64LE | i64BE |
+OVT [00..] 00 00    2 |     0.0 |     0.0 |                   0 |     0 |
+CS  [00..] c0 5c  115 | ~2e-319 | ~5e+138 | 6683341847017816064 | 49244 |
+```
+
+The rest is not included, since it's similar nonsense.
+
+This doesn't seem right. What the hell is up with this binary number?
+
+**What does `c05c` mean???**
+
+
+### .bson - seems like a familiar extension?
+
+Some pieces of software use extensions to help with identifying the file type.
+Since `file` doens't seem to recognize the save file as anything but binary
+
+```cmd
+$ file SaveGame/SceneMap_default/AllManagers.dat.bson
+SaveGame/SceneMap_default/AllManagers.dat.bson: data
+```
+
+I will assume that `.bson` will have some meaning. Seems familiar to `.json`...
+
+[Googling `bson`](https://www.google.com/search?q=bson) gives me a Wikipedia definition:
+
+> BSON is a computer data interchange format.
+> The name "BSON" is based on the term JSON and stands for "Binary JSON".
+> It is a binary form for representing simple or complex data structures including
+> associative arrays, integer indexed arrays, and a suite of fundamental scalar types.
+> BSON originated in 2009 at MongoDB.
+
+Ah, OK, a database binary type stuff. Lets google for a parser or a spec
+
+- https://www.google.com/search?q=bson+parser
+- https://github.com/mongodb/js-bson `[specification]`
+- https://bsonspec.org/
+- https://bsonspec.org/spec.html
+
+Oh, the standard looks pretty easy. But for my sanity's sake, I will just use the premade parser.
+
+
+### bson parser
+
+Let's grab the package from `npm` and use it:
+
+```cmd
+$ take bson-parser
+$ npm init
+$ npm install --save bson
+$ cp package.json tmp && jq '.+{"type":"module"}' package.json > tmp && mv tmp package.json
+```
+
+<FilenameForCodeblock filename="./parse.js"/>
+```js
+import fs from 'node:fs/promises';
+import {deserialize} from 'bson';
+
+const SAVEFILE = process.env.HOME + '/.steam/steam/steamapps/compatdata/934780/pfx' +
+  '/drive_c/users/steamuser/AppData/LocalLow/Fallen Tree Games Ltd' +
+  '/American Fugitive/SaveGame/SceneMap_default/AllManagers.dat.bson';
+
+(async () => {
+  try {
+    await fs.access(SAVEFILE, fs.constants.R_OK);
+  } catch (e) {
+    console.error(`Cannot access file ${SAVEFILE}`);
+    return 1;
+  }
+
+  const saveData = await fs.readFile(SAVEFILE);
+  const deserialized = deserialize(saveData);
+
+  console.dir(deserialized);
+  await fs.writeFile('./parsed-savefile.json', JSON.stringify(deserialized));
+})().then(c => process.exit(c));
+```
+
+```cmd
+$ node ./parse.js
+{
+  'MGR_PLAYERPERSISTANTDATA.Cash': 39562,
+  MGR_PLAYERPERSISTANTDATAUpgradePoints: 20,
+  RespawnCount: 0,
+  Unlocks: {
+[... a lot more keys and values ...]
+  }
+}
+```
+
+Looks nice. Let's poke around some keys to figure out what I can do
+and add some comments on what might the values be representing:
+
+```cmd
+$ jq '. |= keys' parsed-savefile.json
+[
+  # Keys like `8aad93885f9dbdd44bfdaa8189b04272_10_data.SpecificUnlocks` skipped
+  "AreaUnlocked",                            # Which part of town is unlocked
+  "Clues",                                   # Which clues have been discovered
+  "CurrentHealth",                           # Self-explanatory
+  "DoingCharacterUnlockObjective",           # Self-explanatory
+  "EquippedItem",                            # Self-explanatory
+  "Explosive",                               # Explosive ammo count
+  "Handgun",                                 # Handgun ammo count
+  "HasPlayedIntroTankConversation",          # Self-explanatory
+  "Inventory_Items",                         # List of items in inventory
+  "LastIntroMessageType",                    # No clue
+  "MGR_COLLECTABLE.CollectedItem",           # No clue, maybe flyers collected...?
+  "MGR_COLLECTABLEViewedItem",               # No clue, maybe flyers collected...?
+  "MGR_OBJECTIVESMGR.TutorialState",         # Self-explanatory
+  "MGR_OBJECTIVESMGRObjectiveIndex",         # Self-explanatory, the progress in current mission
+  "MGR_OFFENCE.LastATMOpenTime",             # No clue
+  "MGR_PHONEBOOKMGR.AvailableCharacters",    # List of characters in phone book
+  "MGR_PLAYER.CanRestoreCheckpoint",         # No clue, should be self-explanatory, isn't really
+  "MGR_PLAYERPERSISTANTDATA.Cash",           # Amount of current cash
+  "MGR_PLAYERPERSISTANTDATAUpgradePoints",   # Amount of current uprade points
+  "MGR_STASHMGR.Stashes",                    # List of stashes UUIDs
+  "MGR_STASHMGRPaintings",                   # List of paitings UUIDs
+  "MGR_STATSMGR.Stats",                      # List of statistics
+  "MGR_STATSMGRVehiclesDriven",              # List of vehicle UUIDs
+  "MGR_TIME_OF_DAY.totalGameTimeInMinutes",  # Self-explanatory
+  "MGR_TRAINERMGR.SeenTrainerTypes",         # No clue
+  "MGR_VEHICLEJUMPMGR.Records",              # List of UUID-to-decimal of unqiue stunt jumps and their length
+  "MetalDetectorEnabled",                    # Self-explanatory
+  "Minigun",                                 # Amount of minigun ammo
+  "ObjectivesCompletePerCharacter",          # A huge list of UUIDs, probably objective objects
+  "RespawnCount",                            # How many times has the character respawned
+  "RespawnOnObjectiveCount",                 # No clue
+  "Rifle",                                   # Amount of rifle ammo
+  "SMG",                                     # Amount of SMG ammo
+  "SaidEscapeInDifferentLocation",           # No clue
+  "SceneArea",                               # No clue, probably current area of character...?
+  "Shotgun",                                 # Amount of shotgun ammo
+  "Unlocks",                                 # List of upgrades and their levels
+  "WornClothing"                             # UUID of worn clothes item
+]
+```
+
+Although some of these values have unknown purpose, it's nice seeing English being used
+(I worked on a French codebase once).
+
+A whole lot of talk and no savefile editing! Let's fix that!
+
+
+### Editing the save file
+
+Since there is no checksum, the following should work:
+
+<FilenameForCodeblock filename="./parse.js"/>
+```js
+import fs from 'node:fs/promises';
+import {deserialize, serialize} from 'bson';
+
+const SAVEFILE = process.env.HOME + '/.steam/steam/steamapps/compatdata/934780/pfx' +
+  '/drive_c/users/steamuser/AppData/LocalLow/Fallen Tree Games Ltd' +
+  '/American Fugitive/SaveGame/SceneMap_default/AllManagers.dat.bson';
+
+(async () => {
+  try {
+    await fs.access(SAVEFILE, fs.constants.R_OK);
+  } catch (e) {
+    console.error(`Cannot access file ${SAVEFILE}`);
+    return 1;
+  }
+
+  const saveData = await fs.readFile(SAVEFILE);
+  const deserialized = deserialize(saveData);
+
+  deserialized['MGR_PLAYERPERSISTANTDATA.Cash'] = 999999;
+
+  const serialized = serialize(deserialized);
+  await fs.writeFile('./savegame.gson', serialized);
+})().then(c => process.exit(c));
+```
+
+```cmd
+$ node ./parse.js
+$ cp "${PATH_TO_SAVE}" AllManagers.dat.bson.bak
+$ cp savegame.gson "${PATH_TO_SAVE}"
+```
+
+I ran American Fugitive and... nothing! My cash kept resetting back!
+
+> **This took me 30 minutes to debug.**
+
+Oh yeah, I forgot to disable Steam Cloud saves. D'oh!
+
+
+### Cheating Like a King
+
+Lets change some more of the values:
+
+<FilenameForCodeblock filename="./parse.js"/>
+```js
+import fs from 'node:fs/promises';
+import {deserialize, serialize} from 'bson';
+
+const SAVEFILE = process.env.HOME + '/.steam/steam/steamapps/compatdata/934780/pfx' +
+  '/drive_c/users/steamuser/AppData/LocalLow/Fallen Tree Games Ltd' +
+  '/American Fugitive/SaveGame/SceneMap_default/AllManagers.dat.bson';
+
+(async () => {
+  try {
+    await fs.access(SAVEFILE, fs.constants.R_OK | fs.constants.W_OK);
+  } catch (e) {
+    console.error(`Cannot access file ${SAVEFILE}`);
+    return 1;
+  }
+
+  const saveData = await fs.readFile(SAVEFILE);
+  const deserialized = deserialize(saveData);
+
+  console.dir(deserialized['MGR_STATSMGR.Stats']);
+
+  deserialized['MGR_STATSMGR.Stats']['CarsStolen'] = 200;
+  deserialized['MGR_STATSMGR.Stats']['AllFlyersFound'] = 15;
+  deserialized['MGR_STATSMGR.Stats']['TanksDestroyed'] = 100;
+  deserialized['MGR_STATSMGR.Stats']['VehiclesCrushedByTank'] = 250;
+
+  deserialized['MGR_PLAYERPERSISTANTDATA.Cash'] = 999999;
+  deserialized['MGR_PLAYERPERSISTANTDATAUpgradePoints'] = 99;
+  deserialized['Rifle'] = 999;
+  deserialized['Shotgun'] = 999;
+  deserialized['Explosive'] = 999;
+  deserialized['Minigun'] = 999;
+  deserialized['Handgun'] = 999;
+  deserialized['SMG'] = 999;
+  deserialized['CurrentHealth'] = 999;
+
+  const serialized = serialize(deserialized);
+  await fs.writeFile(SAVEFILE, serialized);
+})().then(c => process.exit(c));
+```
+
+Then running the game again
+
+<Image alt="All achievements unlocked on the same day" src={imgAchievementsUnlocked}/>
+
+Nice.
+
+
+### Making an editor
+
+Why not? Let's spin the framework wheel... **Solid JS**
+
+```cmd
+$ npx degit solidjs/templates/ts-bootstrap american-fugitive-save-editor
+$ pnpm install
+$ pnpm run dev
+```
+
+Adding some bits of coding here and there and I have a complete editor!
+
+<Image alt="Editor screenshot" src={editor_png}/>
+
+You can see the complete code on [GitHub](https://github.com/somrlik/american-fugitive-save-editor).
+
+And you can see it in action [here](/apps/american-fugitive-save-editor).
+
+
+## Conclusion
+
+I tried editing a single value in an unknown binary and I failed.
+
+I used a library for parsing the binary and made a whole save editor.
+It was a fun practice round I guess...
+
+See ya.

@@ -1,0 +1,17 @@
+---
+import Layout from "../layouts/BlogPost.astro";
+import { REPOSITORY_GITHUB_URL } from "../consts.ts";
+---
+
+<Layout
+    title="404 🤕"
+    description="The page you are looking for isn't here"
+    isError={true}
+    pubDate={new Date("2000-01-01")}
+>
+    <p>The page you are looking for isn't here.</p>
+    <p>
+        If you think that the page should be added, raise an issue in the
+        <a href={REPOSITORY_GITHUB_URL} target="_blank">GitHub repo</a>.
+    </p>
+</Layout>

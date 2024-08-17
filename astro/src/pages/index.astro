@@ -1,0 +1,213 @@
+---
+import BaseHead from "../components/BaseHead.astro";
+import Header from "../components/Header.astro";
+import Footer from "../components/Footer.astro";
+import { SITE_TITLE, SITE_DESCRIPTION } from "../consts";
+import { Image } from "astro:assets";
+
+import avatar_png from "./_avatar.png";
+import photo_1 from "./_photo-1.png";
+import photo_2 from "./_photo-2.png";
+---
+
+<!doctype html>
+<html lang="en">
+	<head>
+		<BaseHead title={SITE_TITLE} description={SITE_DESCRIPTION} />
+		<style>
+			.floaty-photo {
+				float: right;
+			}
+		</style>
+	</head>
+	<body>
+		<Header />
+		<main>
+			<h1>
+				<Image src={avatar_png} alt="My avatar" width="64" />
+				Karel "somrlik" Syrový
+			</h1>
+			<Image
+				class="floaty-photo"
+				src={photo_1}
+				alt="My photo"
+				width={320}
+			/>
+			<p>is a programmer 👨‍💻 from Czech Republic 🇨🇿.</p>
+			<p id="contact-destination">
+				<a href="#">Click to display contact info</a>
+			</p>
+			<p>
+				<ul>
+					<li>
+						Languages:
+						<ul>
+							<li>🇨🇿 Czech / 🇸🇰 Slovak</li>
+							<li>🇬🇧 English</li>
+							<li>🇫🇷 French (badly)</li>
+							<li>🇷🇺 Russian (badly)</li>
+						</ul>
+					</li>
+					<li>
+						Business ID/IČO:
+						<code data-clip="04883306">04883306</code>
+						(neplátce)
+						<a
+							href="https://ares.gov.cz/ekonomicke-subjekty/res/04883306"
+							target="_blank"
+						>
+							ARES
+						</a>
+					</li>
+					<li>
+						Bank account (Czech):
+						<code data-clip="2300569767/2010">2300569767/2010</code>
+					</li>
+					<li>
+						Bank account (abroad):
+						<code data-clip="CZ2620100000002300569767FIOBCZPPXXX">
+							CZ2620100000002300569767FIOBCZPPXXX</code
+						>
+					</li>
+				</ul>
+			</p>
+
+			<h2>Notable Projects</h2>
+			<p>
+				<ul>
+					<li>
+						Backend work for
+						<a href="https://www.sanatoriums.com/" target="_blank"
+							>Sanatoriums.com</a
+						>
+					</li>
+					<li>
+						Backend for Czech football results for
+						<a
+							href="https://denik.cz/fotbal-vysledky/18702/"
+							target="_blank">Denik.cz</a
+						>
+					</li>
+					<li>
+						Frontend logic for car insurance calculator for
+						<a
+							href="https://www.uniqa.cz/online/pojisteni-vozidla/"
+							target="_blank">Uniqa.cz</a
+						>
+					</li>
+					<li>
+						Backend for
+						<a href="https://music-city.cz" target="_blank"
+							>MusicCity.cz</a
+						>
+						including Helios ERP synchronization
+					</li>
+					<li>
+						Direction, sound and stage design for
+						<a
+							href="https://ochos.cz/propustena-martin-zboril/"
+							target="_blank">Propuštěná</a
+						> and <a
+							href="https://ochos.cz/setkani-martin-zboril/"
+							target="_blank">Setkání</a
+						>
+					</li>
+					<li>
+						<a href="https://poleskola.cz/" target="_blank">Small</a
+						>
+						things
+						<a href="https://lekarnachlumec.cz/" target="_blank"
+							>around</a
+						>
+						the
+						<a href="https://rozpissluzeb.cz/" target="_blank"
+							>web</a
+						>
+					</li>
+				</ul>
+			</p>
+
+			<Image
+				class="floaty-photo"
+				src={photo_2}
+				alt="My photo"
+				width={320}
+			/>
+
+			<h2>What Do I Do?</h2>
+			<p>
+				<ul>
+					<li>Write code in PHP, JS, TS, C, Java, etc.</li>
+					<li>Cook delicious home dishes</li>
+					<li>Garden tomatoes, peppers, spinach and herbs</li>
+					<li>Act and direct in theatre</li>
+					<li>Dabble in soundmanning, stage lighting</li>
+					<li>Play indie games</li>
+				</ul>
+			</p>
+
+			<h2>Weird Stuff I Made</h2>
+			<p>
+				<li>
+					<a
+						href="/apps/american-fugitive-save-editor"
+						target="_blank"
+					>
+						American Fugitive save editor
+					</a>
+				</li>
+			</p>
+
+			<hr />
+
+			<p>I also enjoy making lists.</p>
+
+			<p>
+				Make sure to check out what I post on <a href="/blog"
+					>the blag</a
+				>.
+			</p>
+
+			<hr />
+
+			<blockquote>
+				“He who makes a beast of himself gets rid of the pain of being a
+				man.”
+				<br />
+				― Samuel Johnson
+			</blockquote>
+
+			<hr />
+			Photos by
+			<a href="https://annabartolotti.cz/" target="_blank"
+				>Anna Bartolloti</a
+			>.
+		</main>
+		<Footer />
+		<script>
+			addEventListener("DOMContentLoaded", () => {
+				const phone1 = "3242";
+				const phone2 = "072559";
+				const email1 = "somr";
+				const email2 = "gmai";
+				const email4 = "lik";
+				const e = `${email1}${email4}@${email2}l.com`;
+				const p = `+42${phone2}${phone1}`;
+				const result = `<ul>
+					<li>Email: <a href="mailto:Karel%20Syrový%20%3c${e}" title="Send me and email" target="_blank">${e}</a></li>
+					<li>WhatsApp: <a href="https://wa.me/${p}" target="_blank">Click here</a></li>
+				</ul>`;
+
+				const dest = document.getElementById("contact-destination");
+				function clickListener(e: Event) {
+					e.preventDefault();
+					if (dest) {
+						dest.innerHTML = result;
+						dest.removeEventListener("click", clickListener);
+					}
+				}
+				dest?.addEventListener("click", clickListener);
+			});
+		</script>
+	</body>
+</html>

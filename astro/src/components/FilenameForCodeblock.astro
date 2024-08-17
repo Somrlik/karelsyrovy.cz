@@ -1,0 +1,9 @@
+---
+type Props = {
+    filename: string;
+};
+
+const { filename } = Astro.props;
+---
+
+<label class="filename-for-codeblock">File: <span>{filename}</span></label>
