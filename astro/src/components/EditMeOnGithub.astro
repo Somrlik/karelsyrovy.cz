@@ -12,13 +12,7 @@ interface Props {
 const { localFilePath } = Astro.props;
 
 function findRepoURLFromLocalFilePath(localFilePath: string) {
-    return path.join(
-        REPOSITORY_GITHUB_URL,
-        "tree",
-        REPO_EDIT_BRANCH,
-        ASTRO_RELATIVE_ROOT,
-        localFilePath,
-    );
+    return `${REPOSITORY_GITHUB_URL}/tree/${REPO_EDIT_BRANCH}${ASTRO_RELATIVE_ROOT}/${localFilePath}`;
 }
 ---
 
