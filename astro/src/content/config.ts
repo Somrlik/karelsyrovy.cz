@@ -14,6 +14,7 @@ const blog = defineCollection({
 		minutesRead: z.string().optional(),
 		file: z.string().optional(),
 		isError: z.boolean().optional(),
+		unpublished: z.boolean().optional(),
 	}),
 });
 

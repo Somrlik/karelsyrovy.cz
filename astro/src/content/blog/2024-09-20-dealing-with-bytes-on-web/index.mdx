@@ -1,0 +1,182 @@
+---
+title: 'The Fight Between Mimes and Actors'
+description: 'How mime types and their executioners fight'
+pubDate: '2024-09-22'
+heroImage: './hero.png'
+unpublished: true
+---
+
+import {Image} from 'astro:assets';
+import FilenameForCodeblock from '../../../components/FilenameForCodeblock.astro';
+
+TODO: Split into two articles
+ - One about the history and applications of mime - why it was created, why is it named mime
+ - One about the damned stuff you were dealing with
+
+> I understand that catering to everyone is hard. I even understand many of the decisions made.
+> I just don't get some of them.
+
+I might be a bit disappointed. Not really angry. Because, in some weird way, it makes sense.
+
+What I'm talking about is the handling of mime in JS/ECMAscript/browser.
+
+I understand that TC39 are hard at work bringing web to everyone but some decisions are just baffeling.
+
+All around, the APIs proposed are fine, but sometimes I think they might have missed the mark.
+
+Let's take for example:
+
+
+## The History of <code>mime</code> types
+
+> If you know what `mime type` means, feel free to skip this section.
+
+Initially every file was just that - a file. A chunk of bytes on a drive.
+It might have been a text document or a compiled binary or
+a databse chunk - you would not know. How would you differentiate between a `plaintext` file
+containing human readable text and machine instructions? You wouldn't.
+
+When you would open *a* file, you could have opened a machine-code binary or a human readable text file.
+For our programming forfathers there would be little difference. But along the way, there came a need
+to set apart code that was human-readable and code that was machine-like, escpecially with the advent of
+high-level languages like C.
+
+Alas, other people than programmers started using computers, so the need to distinguish between
+human-readable documents and binaries (machine-readable documents) increased.
+
+Many of early programmers simply assumed that a file is not human readable when the first
+few bytes are not human readable. This gave birth to differentionaton by `magic` numbers.
+
+If a file started with a few select bytes, for example `7f 45 4c 46`, that meant
+that the file was special and was not meant to be viewed by humans but by machines.
+
+Some of our programming forfathers stared to use `file extensions` as the differentionator - just name
+the file whatever, bang a dot `.` at the end and when the value after the dot means that
+it is human-readable of machine-readable.
+
+```
+| the name of the file |
+  |▼|
+ file.ext
+      |▲|
+      |extension|
+```
+TODO: Finish the thought
+Bacause of course there would be no need to make the filename longer than 8 chars and 3 chars for extension.
+
+
+## The <code>essence</code> of Clipboard API
+
+An `essence` is a fancy word for an assumed mime type on the web. I understand that many platfroms
+might not be able to determine the proper mime type, but then to require proper mimes to be
+present is a whole other question (styles being loaded as `text/css`, wasm as `application/wasm`);
+
+For example, <abbr title="what the frick">WTF</abbr> is a `os specific well-known format`?
+
+As per [W3](https://www.w3.org/TR/clipboard-apis/#to-os-specific-well-known-format) it is an algorithm
+that takes in \[sic\]
+- <i>mimeType</i>
+
+and returns \[sic\]
+- <i>wellKnownFormat</i>, a platform specific string type.
+    On Mac it's NSPasteboardType, on Windows it's LPCWSTR and Linux it's a const char*.
+
+The algo definition is \[sic, improved for readability\]\(\):
+
+```
+Let wellKnownFormat be a string.
+- If mimeType's essence is "text/plain", then
+    On Windows, follow the convention described below:
+    Assign CF_UNICODETEXT to wellKnownFormat.
+    Return wellKnownFormat.
+
+    On MacOS, follow the convention described below:
+    Assign NSPasteboardTypeString to wellKnownFormat.
+    Return wellKnownFormat.
+
+    On Linux, ChromeOS, and Android, follow the convention described below:
+    Assign "text/plain" to wellKnownFormat.
+    Return wellKnownFormat.
+
+- Else, if mimeType's essence is "text/html", then
+    On Windows, follow the convention described below:
+    Assign CF_HTML to wellKnownFormat.
+    Return wellKnownFormat.
+
+    On MacOS, follow the convention described below:
+    Assign NSHTMLPboardType to wellKnownFormat.
+    Return wellKnownFormat.
+
+    On Linux, ChromeOS, and Android, follow the convention described below:
+    Assign "text/html" to wellKnownFormat.
+    Return wellKnownFormat.
+
+- Else, if mimeType's essence is "image/png", then
+    On Windows, follow the convention described below:
+    Assign "PNG" to wellKnownFormat.
+    Return wellKnownFormat.
+
+    On MacOS, follow the convention described below:
+    Assign NSPasteboardTypePNG to wellKnownFormat.
+    Return wellKnownFormat.
+
+    On Linux, ChromeOS, and Android, follow the convention described below:
+    Assign "image/png" to wellKnownFormat.
+    Return wellKnownFormat.
+
+- Else
+    This is left to the implementation...
+```
+
+Simplified, OKey, so when the text is not explicitly `text/html`
+- On `Windows` the format is `CF_UNICODETEXT`
+- On `MacOs` the format is `NSPasteboardTypeString`
+- On `POSIXlike` the format is `text/plain`
+- On `elsewhere` the format is `whateverthefuck/youwant`
+
+This seems like a good enought assumtion. But what if I passed a **raw binary** as `text/plain`?
+
+```sh
+$ echo -n -e '\x13\x37' > data.bin
+$ xxd data.bin
+00000000: 1337                                     .7
+$ xclip -sel c < ./data.bin
+```
+
+Now I have a string of weird binary chars `0x13 0x37` in my clipboard. This is verified with `-o` flag:
+```sh
+$ xclip -o -sel c | xxd
+00000000: 1337                                     .7
+```
+
+Since there is no mime data associated with `13 37`, the browser _assumes_ that the mime is `text/plain` as per
+the `well known format`. Upon making a dumb HTML template:
+```
+<!doctype html><html><body><input type="text"></body></html>
+```
+
+Displaying and pasting results in:
+
+import chrome_paste_input from './chrome-paste-input.png';
+import firefox_paste_input from './firefox-paste-input.png';
+
+`Google Chrome 123.0.6312.105 @ linux 6.5.0-44 x86_64`:
+<Image src={chrome_paste_input} alt="Chrome display"/>
+
+`Mozilla Firefox 129.0.2 @ linux 6.5.0-44 x86_64`:
+<Image src={firefox_paste_input} alt="Firefox display"/>
+
+So it seems that pasting of raw bytes is actually handled reasonably fine. I sadly have no machines running Windows or MacOS
+to check the results against as per the spec.
+
+Still there are a lot of issues coming, not only for binaries
+
+But there is another problem, creeping in the background -
+
+### `edian`ness
+
+> This part of the article requires you to know the difference between little and big
+> endianess.
+
+
+### <code>base64</code> is solved, right...?
