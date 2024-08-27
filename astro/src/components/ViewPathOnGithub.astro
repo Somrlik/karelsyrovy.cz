@@ -7,7 +7,7 @@ interface Props {
 }
 
 const { path, commitHash } = Astro.props;
-const url = `${REPOSITORY_GITHUB_URL}/blob/${commitHash}/${path}`;
+const url = `${REPOSITORY_GITHUB_URL}/blob/${commitHash}${path}`;
 ---
 
 {
