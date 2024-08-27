@@ -1,0 +1,349 @@
+---
+title: 'Experimenting with PHP FFI - I'
+description: 'Stories about using FFI in PHP, its features and pitfalls'
+pubDate: '2024-08-24'
+heroImage: './hero.jpg'
+---
+import ViewPathOnGithub from '../../../components/ViewPathOnGithub.astro';
+
+Why not use it? Could be fun, what are the pitfalls?
+
+## What is FFI
+
+<abbr title="Foreign Function Interface">FFI</abbr> is a mechanism which allows
+developers to use C functions from shared libraries. Sounds simple, doesn't it?
+
+Let's start exploring what is possible!
+
+
+## Creating a Simple Library
+
+Let's create a dumb library first. Let's call it `meddle`.
+
+`libmeddle` provides two implementations for this function:
+
+```c
+/**
+ * Increments the given int by
+ * - 1  if called using C
+ * - 10 if called using CPP
+ * then returns it.
+ */
+int meddle(int);
+```
+
+A weird function to be sure, but I wanted to test possible incompatibilities
+between C and CPP and ease of use with `stl`. I shall extend this in the future.
+
+Nothing interesting in the library, the code can be viewed on the
+<ViewPathOnGithub path='/php-ffi' commitHash='TODO'>sites GitHub.</ViewPathOnGithub>
+
+Only thing we need to know for now is that I have installed it in `./c-lib/pfx/`.
+
+
+## Enabling FFI in PHP
+
+As per [Documentation](https://www.php.net/manual/en/ffi.installation.php)
+I need to `configure` with `--with-ffi`.
+If you're using a prebuild binary, the vendor might have compiled it without
+support for FFI. This can be found out using
+
+```shell
+php --info | grep "Configure Command" | grep -c ffi.
+```
+
+For me, the output is sadly
+```
+0
+```
+so my version wasn't build with FFI. Let's fix that by compiling PHP on our own.
+
+1. [Get source](https://github.com/php/php-src/releases/tag/php-8.3.10)
+2. `tar xvf` untar source
+3. `./buildconf --force` build config
+4. `./configure --with-ffi` and some other options, if required (I would recommend setting a different `--prefix`)
+5. ``make -j`nproc` `` make
+6. `make install` install
+7. `./bin/php --info | grep "Configure Command" | grep -c ffi` now outputs `1`
+
+I already had everything needed, you might need some libs, consult the php `README` if needed.
+
+If you're running php using a provider/hosting and FFI is disabled, then you can ask them to enable it,
+like for [Plesk](https://talk.plesk.com/threads/how-to-enable-ffi-extension-for-php7-4-fpm.362311/).
+
+Finally, just whack `ffi.enable=true` at the end of `php.ini`.
+
+
+## Testing Out
+
+Let's test with a sample from Rasmus Lerdorf
+```php
+<?php
+$ffi = FFI::cdef(
+    "int printf(const char *format, ...);",
+    "libc.so.6");
+$ffi->printf("Hello %s!\n", "world");
+```
+
+```stdout
+Hello world!
+```
+
+It seems to work!
+
+## 3. Using our own libraries with FFI
+
+Since we already have some headers, lets just simply load them! What could go wrong?
+
+```php
+<?php
+$ffi_header = __DIR__ . '/c-lib/include/meddle.h';
+$ffi = FFI::load($ffi_header);
+
+echo "Hello world! " . $ffi->meddle(1);
+```
+
+Even before running, we might spy a small issue - how does FFI know which library to use?
+Let's run it anyway:
+
+```stdout
+Fatal error: Uncaught FFI\ParserException: ';' expected, got '<STRING>' at line 5 in /home/somrlik/Sites/ffi-experiments/run.php:9
+Stack trace:
+#0 /home/somrlik/Sites/ffi-experiments/run.php(9): FFI::load('/home/somrlik/S...')
+#1 {main}
+
+Next FFI\Exception: Failed loading '/home/somrlik/Sites/ffi-experiments/c-lib/include/meddle.h' in /home/somrlik/Sites/ffi-experiments/run.php:9
+Stack trace:
+#0 /home/somrlik/Sites/ffi-experiments/run.php(9): FFI::load('/home/somrlik/S...')
+#1 {main}
+  thrown in /home/somrlik/Sites/ffi-experiments/run.php on line 9
+```
+
+OK, so we don't event parse the header. From the [documentation](https://www.php.net/manual/en/ffi.load.php#:~:text=C%20preprocessor%20directives%20are%20not%20supported%2C%20i.e.%20%23include%2C%20%23define%20and%20CPP%20macros%20do%20not%20work%2C%20except%20for%20special%20cases%20listed%20below.):
+
+> C preprocessor directives are not supported, i.e. #include, #define and CPP macros do not work,
+> except for special cases listed below.
+
+Wow, no `#include`, `#ifdef`, `#endif`? I guess we can live with it for now, so we just remove
+the `extern "C"` compatibility magic. Let's go again I guess:
+
+```stdout
+Fatal error: Uncaught FFI\Exception: Failed resolving C function 'meddle' in /home/somrlik/Sites/ffi-experiments/run.php:9
+Stack trace:
+#0 /home/somrlik/Sites/ffi-experiments/run.php(9): FFI::load('/home/somrlik/S...')
+#1 {main}
+  thrown in /home/somrlik/Sites/ffi-experiments/run.php on line 9
+
+```
+
+Of course, we cannot resolve the function. But... how do we exactly do that? `FFI:load` only takes in
+the path to a header file. As per the documentation:
+
+> The header file may contain a #define statement for the `FFI_LIB` variable to specify the library it exposes.<br/>
+> If it is a system library only the file name is required, e.g.: `#define FFI_LIB "libc.so.6"`.<br/>
+> If it is a custom library, a relative path is required, e.g.: `#define FFI_LIB "./mylib.so"`.<br/>
+
+Seems simple enough to add, although this exposes an issue - what if the headers and the library
+are somewhere **completely** different? Furthermore, what if the system we are on supports multiple
+versions of libraries being used, and we don't (or do) care about which one is used?
+
+Side-note: some users on newer Macs might have had issues with some older software
+requiring `openssl@1.1` which at some point got replaced with `openssl@3.0` with no warning
+(no one reads Mac changelogs, prove me wrong).
+
+For now, it seems that we need to provide the actual path to the library itself in the header.
+Since I'm not installing this lib on my system (since it sucks), let's just add the path to
+the header:
+
+```c
+#ifndef LIB_MEDDLE
+#define LIB_MEDDLE
+
+#define FFI_LIB ../lib/libmeddle-c.so
+
+int meddle(int);
+
+#endif
+```
+
+And let's try again:
+
+```stdout
+Fatal error: Uncaught FFI\Exception: Failed resolving C function 'meddle' in /home/somrlik/Sites/ffi-experiments/run.php:9
+Stack trace:
+#0 /home/somrlik/Sites/ffi-experiments/run.php(9): FFI::load('/home/somrlik/S...')
+#1 {main}
+  thrown in /home/somrlik/Sites/ffi-experiments/run.php on line 9
+
+```
+
+No dice. Wait a second, what did the documentation say?
+
+> C preprocessor directives are not supported, i.e. #include, #define and CPP macros do not work
+
+Oh, like they don't work *at all*. I need to remove them. Let's just create a new file, `meddle_ffi.h`:
+
+```c
+#define FFI_LIB "../lib/libmeddle-c.so"
+
+int meddle(int);
+```
+
+Still no dice, but a better error:
+```stdout
+Fatal error: Uncaught FFI\Exception: Failed loading '/home/somrlik/Sites/ffi-experiments/c-lib/pfx/include/meddle_ffi.h', bad FFI_LIB define in /home/somrlik/Sites/ffi-experiments/run.php:11
+Stack trace:
+#0 /home/somrlik/Sites/ffi-experiments/run.php(11): FFI::load('/home/somrlik/S...')
+#1 {main}
+  thrown in /home/somrlik/Sites/ffi-experiments/run.php on line 11
+
+```
+
+I will now skip forward tens of minutes of debugging to tell you the answer:
+
+> The path in `FFI_LIB` is relative to *current working directory* of the script.
+
+Wait what?
+
+So if I hypothetically wrote a composer package which included a C library, I would have to
+make the headers different for every machine? Even worse, what if someone decided to
+run the script from a different working directory? Or god knows, someone
+might even *move* the library! Or the headers! Or they might even install them on their system!
+
+Or maybe I would like to run my script under a web server, which inherently changes cwd.
+
+> Relative paths just don't work for `FFI_LIB`. Don't try.
+
+```pseudocode
+$ ./run.php
+CWD: /home/somrlik/Sites/ffi-experiments
+Header: /home/somrlik/Sites/ffi-experiments/c-lib/pfx/include/meddle_ffi.h
+Hello world! 2
+$ cd vendor
+$ ../run.php
+CWD: /home/somrlik/Sites/ffi-experiments/vendor
+Header: /home/somrlik/Sites/ffi-experiments/c-lib/pfx/include/meddle_ffi.h
+
+Fatal error: Uncaught FFI\Exception: Failed loading './c-lib/pfx/lib/libmeddle-c.so' (./c-lib/pfx/lib/libmeddle-c.so: cannot open shared object file: No such file or directory) in /home/somrlik/Sites/ffi-experiments/run.php:12
+Stack trace:
+#0 /home/somrlik/Sites/ffi-experiments/run.php(12): FFI::load('/home/somrlik/S...')
+#1 {main}
+  thrown in /home/somrlik/Sites/ffi-experiments/run.php on line 12
+```
+
+So, what to do? `LD_PRELOAD` our library? Well, it works, when `FFI_LIB` is set to `"libmeddle-c.so"`.
+Let's not meddle with this dark magic (for now).
+
+
+## "Fixing" FFI Loading
+
+My best guess is that someone just implemented the loading behavior using `dlopen()` and said good enough.
+
+Let's write a simple wrapper around FFI loading. After some testing, this is what I came up with.
+When you `load` a library:
+- It creates a temporary header file
+- Adds absolute `FFI_LIB` path
+- Copies the original header
+- `FFI:load`s the temp header
+
+I am not using preloading or `FFI::scope` since there might be some issues waiting with these options,
+but let's not get ahead of myself.
+
+```php
+<?php
+declare(strict_types=1);
+
+namespace Somrlik\FfiExperiments;
+
+class FFILoader
+{
+	/** @var \FFI|null[] */
+	private array $instances = [];
+
+	public function load(string $name, string $header, string $library): bool {
+		if (array_key_exists($name, $this->instances)) {
+			return false;
+		}
+
+		$source = fopen($header, 'r+x');
+		if ($source === false) return false;
+		$temp = tmpfile();
+		if ($temp === false) {
+			fclose($source);
+			return false;
+		}
+
+		$written = fwrite($temp, sprintf("#define FFI_LIB \"%s\"\n", $library));
+		if (!$written) {
+			fclose($temp);
+			fclose($source);
+			return false;
+		}
+
+		if (false === stream_copy_to_stream($source, $temp)) {
+			fclose($temp);
+			fclose($source);
+			return false;
+		}
+		fclose($source);
+
+		$oldCwd = getcwd();
+		try {
+			if (fflush($temp) === false) {
+				return false;
+			}
+			$newCwd = dirname($library);
+
+			if (chdir($newCwd) === false) {
+				return false;
+			}
+			$ffi = \FFI::load(stream_get_meta_data($temp)['uri']);
+
+			if ($ffi === null) return false;
+			$this->instances[$name] = $ffi;
+			return true;
+		} finally {
+			chdir($oldCwd);
+			fclose($temp);
+		}
+	}
+
+	public function get(string $name): \FFI|null {
+		return $this->instances[$name] ?? null;
+	}
+}
+```
+
+And
+
+```php
+$ffiLoader = new FFILoader();
+$ffiLoader->load('meddle-c', __DIR__ . '/c-lib/pfx/include/meddle_ffi.h', __DIR__ . '/c-lib/pfx/lib/libmeddle-c.so');
+$ffiLoader->load('meddle-cpp', __DIR__ . '/c-lib/pfx/include/meddle_ffi.h', __DIR__ . '/c-lib/pfx/lib/libmeddle-cpp.so');
+
+echo sprintf("Meddle from C: %d", $ffiLoader->get('meddle-c')->meddle(1)) . PHP_EOL;
+echo sprintf("Meddle from CPP: %d", $ffiLoader->get('meddle-cpp')->meddle(1)) . PHP_EOL;
+```
+
+now works.
+
+```stdout
+Meddle from C: 2
+Meddle from CPP: 11
+```
+
+## Conclusion
+
+The first rodeo made me a bit skeptical.
+
+Needing to write a separate header is fine and even understandable - there
+would be so many issues with having to basically reimplement the whole preprocessor.
+Let's not even think about the different declarations that might be dependent on platform (*foreshadowing*).
+
+The system of determining which library should be chosen as the implementation of
+the headers is ~not optimal~ fucking unusable. Still, it at least works for system-wide
+libraries, just don't go around playing with the feature too much I guess.
+
+<ViewPathOnGithub path='/php-ffi/' commitHash='TODO'>Code is in the repo.</ViewPathOnGithub>
+
+Take care.

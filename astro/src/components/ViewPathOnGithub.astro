@@ -1,0 +1,19 @@
+---
+import { REPOSITORY_GITHUB_URL } from "../consts.ts";
+
+interface Props {
+    path: string;
+    commitHash: string;
+}
+
+const { path, commitHash } = Astro.props;
+const url = `${REPOSITORY_GITHUB_URL}/blob/${commitHash}/${path}`;
+---
+
+{
+    path && (
+        <a target="_blank" href={url}>
+            <slot />
+        </a>
+    )
+}

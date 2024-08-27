@@ -1,0 +1,17 @@
+{
+    "name": "somrlik/ffi-experiments",
+    "autoload": {
+        "psr-4": {
+            "Somrlik\\FfiExperiments\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Karel Somrlik Syrový",
+            "email": "somrlik@gmail.com"
+        }
+    ],
+    "require": {
+        "ext-ffi": "*"
+    }
+}
