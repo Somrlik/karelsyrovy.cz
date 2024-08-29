@@ -3,11 +3,11 @@ import { REPOSITORY_GITHUB_URL } from "../consts.ts";
 
 interface Props {
     path: string;
-    commitHash: string;
+    commitHash?: string;
 }
 
 const { path, commitHash } = Astro.props;
-const url = `${REPOSITORY_GITHUB_URL}/blob/${commitHash}${path}`;
+const url = commitHash ? `${REPOSITORY_GITHUB_URL}/blob/${commitHash}${path}` : `${REPOSITORY_GITHUB_URL}/tree/master${path}`;
 ---
 
 {

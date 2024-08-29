@@ -1,0 +1,351 @@
+---
+title: 'Experimenting with PHP FFI - II'
+description: 'Stories about using FFI in PHP, its features and pitfalls'
+pubDate: '2024-08-29'
+heroImage: './hero.jpg'
+---
+import ViewPathOnGithub from '../../../components/ViewPathOnGithub.astro';
+import FilenameForCodeblock from '../../../components/FilenameForCodeblock.astro';
+import {YouTube} from 'astro-lazy-youtube-embed'
+
+Last time I made a simple example C library and loaded it using FFI. I ranted a bit about
+how to load the libraries and made a dumb wrapper around the limitations.
+
+Let's experiment some more!
+
+## Adding Some Randomness
+
+Let's try to implement a cross-language pseudo-random number generator. Having
+inconsistent seeded random numbers between platforms or services can be
+pretty annoying when I am writing test cases and/or trying to communicate
+with some services that might be dependent on randomness.
+
+I will borrow the [code from original DOOM](https://github.com/id-Software/DOOM/blob/master/linuxdoom-1.10/m_random.c),
+since it's extremely simple:
+
+<FilenameForCodeblock filename="c-lib/random.c"/>
+
+```c
+unsigned char randomTable[256] = {/* a list of random numbers from 0 to 256 */}
+
+int idx = 0;
+
+int randomInt() {
+    idx = (idx + 1) & 0xFF;
+    return randomTable[idx];
+}
+
+int randomIntBetween(int min, int max) {
+    return min + randomInt() / (256 / (max - min + 1) + 1);
+}
+
+void randomIntReset() {
+    idx = 0;
+}
+```
+
+Yes, `randomIntBetween` will produce lousy random numbers, but they should be good enough.
+I could implement some kind of [Mersenne twister](https://en.wikipedia.org/wiki/Mersenne_Twister),
+but I chose to <abbr title="Keep It Simple Stupid">KISS</abbr>.
+
+Next, I create the header:
+<FilenameForCodeblock filename="c-lib/include/random_ffi.h"/>
+
+```c
+int randomInt();
+
+int randomIntBetween(int min, int max);
+
+void randomIntReset();
+```
+
+Upon adding the file to `cmake`, I decided to do a bit of testing,
+so I could compare the outputs. I opted for popular testing frameworks
+`googletest` for C and `phpunit` for PHP:
+
+<FilenameForCodeblock filename="c-lib/test/random_test.cpp"/>
+
+```
+#include <gtest/gtest.h>
+#include <random.h>
+
+TEST(Random, SmokeTest) {
+    randomIntReset();
+    EXPECT_EQ(randomInt(), 8);
+    EXPECT_EQ(randomInt(), 109);
+    EXPECT_EQ(randomInt(), 220);
+    EXPECT_EQ(randomInt(), 222);
+    EXPECT_EQ(randomInt(), 241);
+
+    randomIntReset();
+    EXPECT_EQ(randomInt(), 8);
+    EXPECT_EQ(randomInt(), 109);
+    EXPECT_EQ(randomInt(), 220);
+    EXPECT_EQ(randomInt(), 222);
+    EXPECT_EQ(randomInt(), 241);
+}
+```
+
+<FilenameForCodeblock filename="test/FFIRandomTest.php"/>
+
+```php
+<?php
+declare(strict_types=1);
+
+namespace Somrlik\FfiExperiments\Test;
+
+use PHPUnit\Framework\TestCase;
+use Somrlik\FfiExperiments\FFILoader;
+
+class FFIRandomTest extends TestCase
+{
+	public function testSmoke() {
+		$loader = new FFILoader();
+		$loader->load(
+			'random',
+			__DIR__ . '/../c-lib/pfx/include/random_ffi.h',
+			__DIR__ . '/../c-lib/pfx/lib/libmeddle-c.so'
+		);
+
+		$loader->get('random')->randomIntReset();
+		self::assertEquals(8, $loader->get('random')->randomInt());
+		self::assertEquals(109, $loader->get('random')->randomInt());
+		self::assertEquals(220, $loader->get('random')->randomInt());
+		self::assertEquals(222, $loader->get('random')->randomInt());
+		self::assertEquals(241, $loader->get('random')->randomInt());
+
+		$loader->get('random')->randomIntReset();
+		self::assertEquals(8, $loader->get('random')->randomInt());
+		self::assertEquals(109, $loader->get('random')->randomInt());
+		self::assertEquals(220, $loader->get('random')->randomInt());
+		self::assertEquals(222, $loader->get('random')->randomInt());
+		self::assertEquals(241, $loader->get('random')->randomInt());
+	}
+}
+```
+
+And...
+
+```stdout
+$ ctest
+Test project /home/somrlik/Sites/karelsyrovy.cz/php-ffi/c-lib/build
+    Start 2: Random.SmokeTest
+1/4 Test #2: Random.SmokeTest .................   Passed    0.01 sec
+    Start 3: Random.UnexpectedValues
+2/4 Test #3: Random.UnexpectedValues ..........   Passed    0.01 sec
+    Start 4: Random.InBetween
+3/4 Test #4: Random.InBetween .................   Passed    0.01 sec
+    Start 5: Random.RepeatsAfter256
+4/4 Test #5: Random.RepeatsAfter256 ...........   Passed    0.01 sec
+
+100% tests passed, 0 tests failed out of 5
+
+Total Test time (real) =   0.04 sec
+```
+
+And...
+```
+❯ ./vendor/bin/phpunit
+PHPUnit 10.5.30 by Sebastian Bergmann and contributors.
+
+Runtime:       PHP 8.3.10
+Configuration: /home/somrlik/Sites/karelsyrovy.cz/php-ffi/phpunit.xml
+
+....                                                                4 / 4 (100%)
+
+Time: 00:00.009, Memory: 4.00 MB
+```
+
+
+> It just works!
+
+<YouTube
+    title="It Just Works Supercut"
+    videoId="nVqcxarP9J4"
+/>
+
+
+Well, this was anticlimactic. Why not indulge in something more complex?
+
+### Add Some (Intelli)Sense
+
+A small `abstract class` is all what we need in PHP:
+```php
+<?php
+declare(strict_types=1);
+
+namespace Somrlik\FfiExperiments\FFI;
+
+abstract class Random
+{
+	abstract public function randomInt();
+
+	abstract public function randomIntBetween(int $max, int $min);
+
+	abstract public function randomIntReset(): void;
+}
+```
+
+Since this is basically word for word everything `random_ffi.h` contains,
+I could probably automate the creation. Let's leave that be for now.
+
+
+## `struct`s of `int`s, `enums`, pointers to `char`
+
+Delving deeper into the features of C and hyped up by previous success,
+I started big - **a maze solver**.
+
+But first I need a maze to solve, right? **A maze generator** it is then.
+
+I implemented [randomized depth-first with stack](https://en.wikipedia.org/wiki/Maze_generation_algorithm#Iterative_implementation_(with_stack)) - it seemed simple at the time.
+
+Whole implementation is of course available <ViewPathOnGithub path="/php-ffi/c-lib/maze_generator.c">GitHub</ViewPathOnGithub>.
+
+The important bit is in the header - let's take a look:
+```c
+#include <stdbool.h>
+#define OUTPUT_PARAM
+
+typedef enum MazeTile {
+    MAZE_TILE_WALL = 0,
+    MAZE_TILE_PATH = 1,
+    /** @internal @deprecated */
+    MAZE_TILE_VISITED = 99,
+} MazeTile;
+
+typedef struct Maze {
+    int width;
+    int height;
+    MazeTile* layout;
+} Maze;
+
+typedef struct MazeSolution {
+    // TODO: Somehow do steps
+} MazeSolution;
+
+bool mazeToString(Maze, OUTPUT_PARAM char* buffer, unsigned int bufferLen);
+
+bool generateMaze(int width, int height, OUTPUT_PARAM Maze* maze);
+
+bool solveMaze(Maze, OUTPUT_PARAM MazeSolution*);
+```
+
+`OUTPUT_PARAM` is just a syntactic sugar, I will get rid of it without mention.
+
+I have some `structs`, some of them even have pointers in them, unnamed arguments,
+buffer lengths, `bool` returns, oh my.
+
+Stripping all the stuff I know FFI parser will fail on results in:
+```c
+typedef enum MazeTile {
+    MAZE_TILE_WALL = 0,
+    MAZE_TILE_PATH = 1,
+} MazeTile;
+
+typedef struct Maze {
+    int width;
+    int height;
+    MazeTile* layout;
+} Maze;
+
+typedef struct MazeSolution {
+} MazeSolution;
+
+bool mazeToString(Maze, char* buffer, unsigned int bufferLen);
+
+bool generateMaze(int width, int height, Maze* maze);
+
+bool solveMaze(Maze, MazeSolution*);
+```
+
+I also removed `MAZE_TILE_VISITED`, since it is internal (and deprecated to boot).
+
+### Rewriting C Tests to PHP
+
+Since `maze.h` has a few tests and thanks to previous successes, rewriting them to
+run in PHP would be a breeze.
+
+On
+```php
+$mazeLib = $this->loadMaze();
+
+self::assertFalse($mazeLib->generateMaze(10, 10, null));
+
+$maze = $mazeLib->new('Maze');
+$maze->width = 0;
+$maze->height = 0;
+$maze->layout = null;
+
+self::assertFalse($mazeLib->generateMaze(-1, -1, $maze));
+
+```
+
+I encountered first snag,
+```stdout
+FFI\Exception: Passing incompatible argument 3 of C function 'generateMaze', expecting 'struct Maze*', found 'struct Maze'
+```
+
+thankfully, FFI provides an interface for creating pointers, so
+
+```php
+self::assertFalse($mazeLib->generateMaze(-1, -1, \FFI::addr($maze)))
+```
+
+works. Let's skip ahead a bit:
+
+```php
+self::assertTrue($mazeLib->generateMaze(3, 3, \FFI::addr($maze)));
+
+$buffer = '';
+$bufferSize = 1024 * 1024;
+self::assertTrue($mazeLib->mazeToString($maze, $buffer, $bufferSize));
+self::assertEquals("###\n# #\n###\n", $buffer);
+```
+
+Results in `strings not being equal` - this is understandable, since FFI has
+special treatment for c strings:
+
+```php
+$buffer = $mazeLib->new('char[1024 * 1024]');
+$bufferSize = 1024 * 1024;
+self::assertTrue($mazeLib->mazeToString($maze, $buffer, $bufferSize));
+self::assertEquals("###\n# #\n###\n", \FFI::string($buffer));
+```
+
+Works, let's continue -
+
+```php
+$randomLib = $this->loadRandom();
+
+$randomLib->randomIntReset();
+self::assertTrue($mazeLib->generateMaze(100, 5, \FFI::addr($maze)));
+self::assertEquals(100, $maze->width);
+self::assertEquals(5, $maze->height);
+self::assertTrue($mazeLib->mazeToString($maze, $buffer, $bufferSize));
+self::assertEquals(file_get_contents(self::EXPECTED_100x5_MAZE_FILE), \FFI::string($buffer));
+```
+
+Even when parsing another header with the same lib! Makes sense, the library is
+already attached to the process, so nothing should change - at least logically. Enums:
+
+```php
+public function testEnums() {
+    $mazeLib = $this->loadMaze();
+    $mazeTile = $mazeLib->new('MazeTile');
+    $mazeTile->cdata = $mazeLib->MAZE_TILE_PATH;
+    self::assertEquals(1, $mazeTile->cdata);
+}
+```
+
+Everything passes! Of course, if I didn't own the `$buffer`, I would need to call `\FFI::free($buffer);`,
+but this proved extremely simple!
+
+
+## Conclusion
+
+This was really fun and everything works as it should. With nearly all the primitives available and tested,
+there is nothing in my way to *actually* do something interesting.
+
+As always, the code is on <ViewPathOnGithub path="/php-ffi/">GitHub</ViewPathOnGithub>.
+
+Take care.

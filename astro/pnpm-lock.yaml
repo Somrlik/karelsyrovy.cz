@@ -23,6 +23,9 @@ importers:
       astro:
         specifier: ^4.14.2
         version: 4.14.2(rollup@4.20.0)(typescript@5.5.4)
+      astro-lazy-youtube-embed:
+        specifier: ^0.5.0
+        version: 0.5.0(astro@4.14.2(rollup@4.20.0)(typescript@5.5.4))
       mdast-util-to-string:
         specifier: ^4.0.0
         version: 4.0.0
@@ -722,6 +725,11 @@ packages:
   astring@1.8.6:
     resolution: {integrity: sha512-ISvCdHdlTDlH5IpxQJIex7BWBywFWgjJSVdwst+/iQCoEYnyOaQ95+X1JGshuBjGp6nxKUy1jMgE3zPqN7fQdg==}
     hasBin: true
+
+  astro-lazy-youtube-embed@0.5.0:
+    resolution: {integrity: sha512-2/tr5K/k/IjwnD53khpR9OlePPNkXa0+OqrmeMfOaWxyQYaKrKDoXC7BVi1zmZOQVkukBfy3WKepRoQbex147w==}
+    peerDependencies:
+      astro: ^2.0.0 || ^3.0.0-beta || ^4.0.0-beta
 
   astro@4.14.2:
     resolution: {integrity: sha512-x9VeYx8Ih6kYKBMVwwsfRzsZVq30+SUhiawnYQ6+46qQnEx3zH05KcH24HsJMe6dVpHD8HdH7CWR5C4o7Q/jeg==}
@@ -2821,6 +2829,10 @@ snapshots:
   array-iterate@2.0.1: {}
 
   astring@1.8.6: {}
+
+  astro-lazy-youtube-embed@0.5.0(astro@4.14.2(rollup@4.20.0)(typescript@5.5.4)):
+    dependencies:
+      astro: 4.14.2(rollup@4.20.0)(typescript@5.5.4)
 
   astro@4.14.2(rollup@4.20.0)(typescript@5.5.4):
     dependencies:

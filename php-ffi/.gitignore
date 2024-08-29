@@ -1,3 +1,6 @@
 vendor
 c-lib/build
 c-lib/pfx
+
+.phpunit.cache
+.phpunit.result.cache
