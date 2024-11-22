@@ -21,6 +21,7 @@ add_library(meddle-c SHARED
     maze_to_string.c
     maze_generator.c
     maze_solver.c
+    abi_interop.c
 )
 
 add_library(meddle-cpp SHARED
@@ -40,6 +41,7 @@ set_target_properties(meddle-cpp PROPERTIES
 
 add_executable(maze-debug-c
     maze_debug.c
+    abi_interop.c
 )
 target_link_libraries(maze-debug-c PRIVATE meddle-c)
 set_target_properties(maze-debug-c PROPERTIES

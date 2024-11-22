@@ -32,6 +32,9 @@ importers:
       reading-time:
         specifier: ^1.5.0
         version: 1.5.0
+      remark-gfm:
+        specifier: ^4.0.0
+        version: 4.0.0
       sharp:
         specifier: ^0.33.5
         version: 0.33.5

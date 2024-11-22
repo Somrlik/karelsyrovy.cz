@@ -1,0 +1,342 @@
+---
+title: 'Experimenting with PHP FFI III - ABI and The Magic Behind libffi'
+description: 'Stories about using FFI in PHP, its features and pitfalls'
+pubDate: '2024-11-22'
+heroImage: './hero.jpg'
+published: true
+---
+import ViewPathOnGithub from '../../../components/ViewPathOnGithub.astro';
+import FilenameForCodeblock from '../../../components/FilenameForCodeblock.astro';
+
+ABIs (Application Binary Interface) are a lot like APIs (Application Programming Interface).
+You might even consider ABI an API, since they describe the programming interface on a binary level.
+
+So far I've been compiling both `PHP` and `libmeddle` with the same version of compiler
+on the same system - that means that the holy trinity has been the same:
+- The architecture - `x86_64`
+- The operating system - `GNU/Linux`
+- The compiler - `GCC 11.4.0`
+
+Why does all of this matter? Well, what would happen if I compiled `libmeddle` under a different system, let's say
+- The architecture - `aarm64`
+- The OS - `Windows NT 10.0` (yes, Windows 11 still has NT version of 10.0)
+- The compiler - `MSVC 17.10.1`
+
+what exactly would change?
+
+### Aside About Windows
+
+> You can skip this.
+
+I didn't actually compile `libmeddle` under Windows. But I honestly *tried*.
+
+Microsoft provides [prebuild VMs for development](https://developer.microsoft.com/en-us/windows/downloads/virtual-machines/),
+that come with a lot of the goodies - for starters, it's the `Enterprise` edition (whatever that means),
+`Visual Studio 2022` with `MSVC 17.10.1` prepackaged, `WSL 2`, `Windows Terminal` (whatever that is) and
+even the developer mode is enabled! You just need to re-download it when the license expires. Seems great.
+
+```
+> Is it possible to get an ARM version of the VM?
+
+Unfortunately, we don't have an ARM version available at the moment. We understand that this
+may be disappointing news, but we don't have any short term plans to create these. However, we're always
+open to feedback and suggestions from our users and will take them into consideration when planning future updates.
+```
+
+Okay, so no `aarm64` for me. I don't even have any machines ATM, was planning to make someone
+owning one run the tests.
+
+The image is whopping **22.1 GB**, and upon running its god awful slow and asks me to activate `Cortana`,
+login to my Microsoft account when running `Visual Studio` and installs fucking `Candy Crush`.
+
+I deleted it.
+
+The `microsoft/windows` [images on DockerHub](https://hub.docker.com/r/microsoft/windows) aren't even desktop Windows,
+they're some kind of `Windows Server Container` which can only run on Windows 10 Enterprise or whatever.
+
+Needless to say I don't think I will be compiling *anything* under Windows for a long time.
+
+
+## A Lot
+
+First of all, I will get a `.dll` instead of `.so`. Windows has a different "syscall" than `dlopen()`, `LoadLibrary()`
+from what I can gather from the docs. Shouldn't be an issue. Right?
+
+I "compiled" (not really, see above) `libmeddle.dll` under `MSVC`, thus its full "holy triplet" is [^1] :
+
+```
+x86_64-pc-windows-msvc
+ ^^^^   ^^^^^^^^   ^^
+ arch     os      compiler
+```
+
+But I was forced to compile PHP using `MingW` (since `MSVC` is not a supported compiler for `PHP > like 5`), thus
+it's "triplet" is [^2] :
+
+```
+x86_64-w64-mingw32
+```
+
+So is `libmeddle.dll` compiled under `MSVC` compatible with `PHP` [^3] compiled under `Mingw`? They both have a
+couple of choices to make, for example:
+- if the headers say `long`, is it 4 bytes or 8 bytes? Or *6* bytes?
+- if the headers say `int`, is it 4 bytes `little endian` or `big endian`? Or is it 4 bytes?
+- if I have `struct {char a; char b; char c;}`, do I align it to 4 bytes for some magic memory
+  optimization or keep it as 3 bytes wide?
+- do I represent `double` as `IEEE 754` values or just use my own floating-point representation?
+
+Tell us, tell us, I hear you pleading, are they actually compatible?
+
+Well, *maybe*.
+
+
+## GCC and Clang
+
+Since I wasn't able to test compiling under Windows (see rant above), I decided on a simpler and more tool-supported
+dilemma: `GCC` vs. `Clang` (under linux).
+
+Compiling Clang using GCC feels a bit funny. Like when you use an old compiler to build the new one.
+Like shooting and old dog just to get a new one. Morbid.
+
+I would compile `libmeddle` under `GCC 11.4.0` and `CLang@0efa38699` and get two very similar looking, albeit not the same
+"triplets":
+```
+x86_64-pc-linux-gnu
+x86_64-pc-linux-clang
+```
+
+Just for fun, I also added `abi_interop.h` which contains:
+
+```c
+__int128_t returnsLooongInt(__int128_t);
+```
+
+`int128` or `bigint` (or whatever you might call it) which is famous for being the odd-one-out on many platforms.
+
+Using a beautiful piece of software called `abi-complience-checker` [GitHub](https://lvc.github.io/abi-compliance-checker/)
+I can then verify that both versions of `libmeddle` have the same ABI:
+```stdout
+$ ./compare-abi.sh
+$ abi-dumper libmeddle-gcc.so -o ABI-0.dump -lver 0
+Reading debug-info
+Creating ABI dump
+
+The object ABI has been dumped to:
+  ABI-0.dump
+
+$ abi-dumper libmeddle-clang.so -o ABI-1.dump -lver 1
+abi-dumper libmeddle-clang.so -o ABI-1.dump -lver 1
+Reading debug-info
+Creating ABI dump
+
+The object ABI has been dumped to:
+  ABI-1.dump
+
+$ abi-compliance-checker -l libmeddle -old ABI-0.dump -new ABI-1.dump
+Preparing, please wait ...
+Comparing ABIs ...
+Comparing APIs ...
+Creating compatibility report ...
+Binary compatibility: 100%
+Source compatibility: 100%
+Total binary compatibility problems: 0, warnings: 1
+Total source compatibility problems: 0, warnings: 1
+Report: compat_reports/libmeddle/0_to_1/compat_report.html
+```
+
+We got an `.html` report!
+
+Now this is what I call `perl` magic (both `abi-dumper` and `abi-compliance-checker` are written in perl), let's see it:
+
+---
+
+<iframe src="/static/ffi-iii-report.html" lazy="true"/>
+
+---
+
+
+It seems like the ABI is the same! Even for `abi_interop.c` which has `__int128_t` type!
+
+So far `libmeddle`'s ABI is the same between compilers - because the compilers `chose to do so`.
+
+Compatibility between `gcc` and `clang` ABIs is (at least on linux for C) superb. You can see a
+bit of a ruckus here and there, but as far as I see, both compilers use compatible ABIs.
+
+A small side-note for C++: since `libffi` is incompatible with... basically any C++ ABI,
+I will not continue in trying to make C++ interface work for this project [^4] . At least using `libffi`.
+
+`cmake` made sure that some ABI is present - let's study the output of `cmake`:
+
+```stdout
+$ CC=clang CXX=c++ cmake -S . -B build
+-- The C compiler identification is Clang 20.0.0
+-- The CXX compiler identification is GNU 11.4.0
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /usr/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /usr/bin/c++ - skipped
+[...a lot more checks...]
+```
+
+Side-note: Using different compilers for C and C++ might seem like a weird thing to do,
+but isn't that uncommon (citation actually needed, I did it several times in uni when testing
+c code using c++, dunno if it actually happens IRL).
+
+If `cmake` met a compiler which did not emit ABI info, it would fail (as was the case of [Zig compiler](https://github.com/ziglang/zig/issues/20493)).
+It does not check that ABIs are the same, because it has nothing to check against. It just checks
+that *some* ABI is emitted.
+
+
+## When ABI **Is** Different
+
+Let's illustrate what might happen if I were a software vendor and provided you with a piece of software
+(let's call it `decrypt`) that was:
+- build for `x86_64` for simplicity’s sake
+- compiled using my own compiler (let's call it `bestc` because it of course would be best)
+- dynamically linked to system `libssl` which I of course compiled with `bestc`
+
+My `bestc` compiler would of course implement its own ABIs, since it's the best and thus don't need
+to be chained by standards.
+
+You would run my `decrypt` binary - it would dynamically link against *yours* `libssl`.
+
+Since my system version of `libssl`'s ABI is different from yours, some issues might pop up.
+For example, when calling `SSL_library_init`, you would expect the return type to be `int`.
+But in my infinite wisdom, when writing `bestc` I knew that all C functions that return int
+in fact return `bool` and that `1` means success. So I did some "optimization" and all functions
+returning `int` now actually return `char`.
+
+It saves up on memory, so no harm done, right? ABI for my systems `libssl` now looks like
+```c
+uint8_t SSL_library_init(void);
+```
+
+...but for yours, it looks like:
+```c
+uint32_t SSL_library_init(void);
+```
+
+So when my `decrypt` dynamically links against your system's `libssl`, I expect `SSL_library_init();` to return a single byte:
+```
+0x01
+```
+
+But yours returns (assuming you are running a little endian system)
+```
+0x01 0x00 0x00 0x00
+```
+
+This still works! Some stack-smashing might occur, but we will leave that to the OS to figure out.
+
+I then (somehow) successfully create a new `*SSL_ctx` and `*SSL` in `decrypt` and read from it using `my_cool_string`:
+```c
+my_cool_string *buf;
+SSL_read(ssl, buf, buf->size);
+```
+
+`my_cool_string` is a `bestc` compiler construct that points to a dynamic `struct` that already includes
+its `size` at the start and just moves the pointer at compile time over by the size `size_t`.
+That's super cool and totally different from `std::basic_string` (`std::basic_string` is actually implemented extremely smart).
+
+`SSL_read` is
+```
+int SSL_read(SSL *ssl, void *buf, int num);
+```
+
+`libssl` compiled using `bestc` of course works, because it moves the `*buf` over by 1
+(`my_cool_string`s are max size 255 in `bestc`) but *your* `libssl` knows nothing about this bullshit,
+so it just reads into the buffer and overwrites `my_cool_string.size`.
+
+---
+
+It might have started as a good analogy, but I got lost in creating my own compilers and structs.
+
+Let's study a real(er) example: [PHP 7.4.19 and PHP 8.0.6 are 61.4% ABI compatible](https://abi-laboratory.pro/index.php?view=compat_report&l=php&v1=7.4.19&v2=8.0.6&obj=f3fdd&kind=abi).
+
+This is understandable, since it's
+a major release version, but still, if you used `libphp` (for some reason) and compiled a
+piece of software that relied on `php_setcookie` function's parameters
+`secure` `httponly` and `url_encode` being `int`s - well, they are now `_Bool`s (fancy Zend type) and thus shrunk
+from 4 to 1 byte. Since `samesite` stayed `zend_string*`, the parameters will be misaligned on the call stack
+and will lead to (in order of severity):
+
+- `SEGFAULT` - will just crash (most likely in this case, since the pointer to `zend_string` will be corrupted)
+- data corruption - self-explanatory
+- undefined behaviour - something wierd will happen
+- silent bug - something weird will happen `sometimes`, but it might work 99.9% of the time
+
+Honestly, it is pretty hard to find *actual* critical and/or long-lasting ABI breakages since
+[abi-laboratory.pro](https://abi-laboratory.pro)
+seems to be serious and deliver on their project goals. Shutouts, kudos, thanks folks.
+
+
+## FFI Magic
+
+This post should not be about ABIs anyway - it should be about FFI in PHP!
+
+`libffi`, which PHP uses for its FFI implementation tries to unify ABIs and provide
+a "universal" ABI, which will most likely be compatible with the expected ABI.
+
+Its most important function is in fact pretty simple,
+```c
+FFI_API
+void ffi_call(ffi_cif *cif,
+	      void (*fn)(void),
+	      void *rvalue,
+	      void **avalue);
+```
+
+Where `cif` is returned from `ffi_prep_cif`, `fn` is pointer to the function, `rvalue` is the return value
+and `avalue` are the arguments. How to size the `struct`s and arguments properly is a painful process and
+can be viewed in [`libffi` GitHub repository](https://github.com/libffi/libffi).
+
+And indeed, much of the code there is about ABIs and how to find proper offsets, how to construct
+function pointers properly etc.:
+```
+case X86_64_INTEGERSI_CLASS:
+  /* Sign-extend integer arguments passed in general
+     purpose registers, to cope with the fact that
+     LLVM incorrectly assumes that this will be done
+     (the x86-64 PS ABI does not specify this). */
+```
+[Link to code excerpt.](https://github.com/libffi/libffi/blob/8e3ef965c2d0015ed129a06d0f11f30c2120a413/src/x86/ffi64.c#L636-L640)
+
+---
+
+And of course, there are some remains of the calls made to `libffi` in PHP documentation and source, most notably today:
+- [`FFI\CType::getFuncABI`](https://www.php.net/manual/en/ffi-ctype.getfuncabi.php)
+
+So if you ever wondered why is there a function with such a weird name and abbreviation, now you know why.
+
+
+## Conclusion
+
+It isn't necessary to know about ABIs, since `libffi` abstracts a lot of it away.
+
+The key takeaways might be:
+- If possible, compile ffi-libraries with the same compiler as PHP
+- Do not use C++ interfaces with FFI
+- If you require tightly-knit functionality with PHP you are probably better off writing an extension
+- This is in no way an exact and detailed post about ABIs
+
+Read more:
+- [C Isn't a Language @ faultlore.com](https://faultlore.com/blah/c-isnt-a-language/)
+- [To Save C We Must Save ABI @ thephd.dev](https://thephd.dev/to-save-c-we-must-save-abi-fixing-c-function-abi)
+
+As always, the code is on <ViewPathOnGithub path="/php-ffi/">GitHub</ViewPathOnGithub>.
+
+Take care.
+
+---
+
+[^1]: This is just what `abicc` calls this ABI. Microsoft has a [different naming scheme](https://x.com/olafurw/status/1487092942191878149).
+[^2]: Again, might not be accurate, but seems most likely from what I saw on the internet.
+[^3]: I am referring to whole PHP as opposed to PHP's version of `libfii` for simplicity.
+      In the process of compiling PHP with `--with-ffi` flag you also compile `libffi`.
+[^4]: GCC implements [itanium C++ ABI](https://itanium-cxx-abi.github.io/cxx-abi/abi.html) while
+      Clang is somewhat compliant with it. This is an issue only for C++ interoperability.
+      [no_unique_address example of different ABIs between compilers](https://www.reddit.com/r/cpp/comments/sjx2mk/no_unique_addres_where_can_in_c_standard_instead/).
