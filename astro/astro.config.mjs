@@ -8,7 +8,7 @@ import remarkGFM from 'remark-gfm';
 
 // https://astro.build/config
 export default defineConfig({
-	site: 'https://example.com',
+	site: 'https://karelsyrovy.cz',
 	markdown: {
 		remarkPlugins: [remarkReadingTime, remarkGFM],
 		extendDefaultPlugins: true,
